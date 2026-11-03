@@ -7,7 +7,9 @@ function hashesMatch(first, second) {
   return firstBuffer.length === secondBuffer.length && timingSafeEqual(firstBuffer, secondBuffer);
 }
 
-export async function registerPatient({ name, email, passwordHash, phone, verificationTokenHash, verificationExpiresAt }) {
+export async function registerPatient({
+  name, email, passwordHash, phone, verificationTokenHash, verificationExpiresAt, clinicId = null, createdByUserId = null,
+}) {
   return withTransaction(async (client) => {
     const user = await client.query(
       `INSERT INTO users (name, email, password_hash, role)
@@ -19,6 +21,13 @@ export async function registerPatient({ name, email, passwordHash, phone, verifi
       'INSERT INTO patients (user_id, phone) VALUES ($1, $2) RETURNING id',
       [user.rows[0].id, phone || null],
     );
+    if (clinicId) {
+      await client.query(
+        `INSERT INTO patient_clinics (patient_id, clinic_id, created_by_user_id)
+         VALUES ($1, $2, $3)`,
+        [patient.rows[0].id, clinicId, createdByUserId],
+      );
+    }
     await client.query(
       `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
        VALUES ($1, $2, $3)`,
@@ -65,10 +74,11 @@ export async function changePassword(userId, sessionId, passwordHash) {
   });
 }
 
-export async function createSession(userId, sessionId, expiresAt) {
+export async function createSession(userId, sessionId, expiresAt, absoluteExpiresAt) {
   await query(
-    'INSERT INTO auth_sessions (id, user_id, expires_at) VALUES ($1, $2, $3)',
-    [sessionId, userId, expiresAt],
+    `INSERT INTO auth_sessions (id, user_id, expires_at, absolute_expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [sessionId, userId, expiresAt, absoluteExpiresAt],
   );
 }
 

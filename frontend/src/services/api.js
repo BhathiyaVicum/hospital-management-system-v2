@@ -27,6 +27,9 @@ async function request(endpoint, options = {}) {
     headers,
     credentials: 'include',
   });
+  if (response.status === 401 && !['/auth/login', '/auth/me'].includes(endpoint)) {
+    window.dispatchEvent(new CustomEvent('auth:session-expired'));
+  }
   const payload = await readPayload(response);
 
   if (!response.ok) {
@@ -172,6 +175,86 @@ export function updateAdminScheduleException(id, payload) {
 }
 export function deleteAdminScheduleException(id) {
   return request(`/admin/schedules/exceptions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+function workspaceList(path, filters = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') params.set(key, value);
+  });
+  return request(`${path}${params.size ? `?${params.toString()}` : ''}`);
+}
+
+export function getDoctorWorkspaceDashboard() { return request('/doctor/dashboard'); }
+export function getDoctorWorkspaceProfile() { return request('/doctor/profile'); }
+export function updateDoctorWorkspaceProfile(payload) {
+  return request('/doctor/profile', { method: 'PATCH', body: JSON.stringify(payload) });
+}
+export function getDoctorWorkspaceAppointments(filters = {}) { return workspaceList('/doctor/appointments', filters); }
+export function getDoctorWorkspaceAppointment(id) { return request(`/doctor/appointments/${encodeURIComponent(id)}`); }
+export function updateDoctorAppointmentWorkflow(id, workflowStatus) {
+  return request(`/doctor/appointments/${encodeURIComponent(id)}/workflow`, {
+    method: 'PATCH', body: JSON.stringify({ workflowStatus }),
+  });
+}
+export function getDoctorConsultation(id) { return request(`/doctor/appointments/${encodeURIComponent(id)}/consultation`); }
+export function saveDoctorConsultation(id, payload) {
+  return request(`/doctor/appointments/${encodeURIComponent(id)}/consultation`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+export function getDoctorWorkspaceSchedules(filters = {}) { return workspaceList('/doctor/schedules', filters); }
+export function createDoctorWeeklySchedule(payload) {
+  return request('/doctor/schedules/weekly', { method: 'POST', body: JSON.stringify(payload) });
+}
+export function updateDoctorWeeklySchedule(id, payload) {
+  return request(`/doctor/schedules/weekly/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+export function createDoctorScheduleException(payload) {
+  return request('/doctor/schedules/exceptions', { method: 'POST', body: JSON.stringify(payload) });
+}
+export function updateDoctorScheduleException(id, payload) {
+  return request(`/doctor/schedules/exceptions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+export function deleteDoctorScheduleException(id) {
+  return request(`/doctor/schedules/exceptions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function getReceptionistDashboard() { return request('/receptionist/dashboard'); }
+export function getReceptionistProfile() { return request('/receptionist/profile'); }
+export function updateReceptionistProfile(payload) {
+  return request('/receptionist/profile', { method: 'PATCH', body: JSON.stringify(payload) });
+}
+export function getReceptionistClinics() { return request('/receptionist/clinics'); }
+export function getReceptionistPatients(filters = {}) { return workspaceList('/receptionist/patients', filters); }
+export function registerReceptionistPatient(payload) {
+  return request('/receptionist/patients', { method: 'POST', body: JSON.stringify(payload) });
+}
+export function linkReceptionistPatient(payload) {
+  return request('/receptionist/patients/link', { method: 'POST', body: JSON.stringify(payload) });
+}
+export function updateReceptionistPatient(id, payload) {
+  return request(`/receptionist/patients/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+export function getReceptionistDoctors(clinicId) {
+  return workspaceList('/receptionist/doctors', { clinicId });
+}
+export function getReceptionistDoctorSlots(doctorId, clinicId, date) {
+  return workspaceList(`/receptionist/doctors/${encodeURIComponent(doctorId)}/slots`, { clinicId, date });
+}
+export function getReceptionistAppointments(filters = {}) { return workspaceList('/receptionist/appointments', filters); }
+export function getReceptionistAppointment(id) { return request(`/receptionist/appointments/${encodeURIComponent(id)}`); }
+export function createReceptionistAppointment(payload) {
+  return request('/receptionist/appointments', { method: 'POST', body: JSON.stringify(payload) });
+}
+export function rescheduleReceptionistAppointment(id, payload) {
+  return request(`/receptionist/appointments/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+export function cancelReceptionistAppointment(id) {
+  return request(`/receptionist/appointments/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+}
+export function updateReceptionistAppointmentWorkflow(id, workflowStatus) {
+  return request(`/receptionist/appointments/${encodeURIComponent(id)}/workflow`, {
+    method: 'PATCH', body: JSON.stringify({ workflowStatus }),
+  });
 }
 
 export function getPatientProfile() {

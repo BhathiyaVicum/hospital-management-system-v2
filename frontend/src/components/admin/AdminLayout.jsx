@@ -89,7 +89,6 @@ export default function AdminLayout({ children }) {
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-on-primary"><span className="material-symbols-outlined">local_hospital</span></span>
             <span className="text-lg font-semibold tracking-tight">MediConnect</span>
           </span>
-          <span className="rounded-full bg-secondary-container px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-secondary-container">HQ</span>
         </Link>
         <nav aria-label="Administrator navigation" className="flex-1 px-4 py-3"><NavigationLinks /></nav>
         <div className="border-t border-slate-100 p-4">

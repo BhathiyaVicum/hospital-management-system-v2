@@ -11,13 +11,6 @@ const GENERIC_VERIFICATION_MESSAGE = 'If the account can be verified, a verifica
 const tokenHash = (token) => createHash('sha256').update(token).digest('hex');
 const otpHash = (email, code, secret) => createHmac('sha256', secret).update(`${email}:${code}`).digest('hex');
 
-function durationMilliseconds(duration) {
-  const match = /^(\d+)(s|m|h|d)$/.exec(duration);
-  if (!match) throw new Error('JWT_EXPIRES_IN must be a duration such as 15m or 1h.');
-  const units = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
-  return Number(match[1]) * units[match[2]];
-}
-
 export async function register({ name, email, password, phone }) {
   const rawToken = randomBytes(32).toString('hex');
   const user = await authRepository.registerPatient({
@@ -36,6 +29,39 @@ export async function register({ name, email, password, phone }) {
     throw error;
   }
   return { message: 'Registration created. Check your email to verify your account.' };
+}
+
+export async function registerPatientAtClinic({ name, email, phone, clinicId, actor, request }) {
+  const rawToken = randomBytes(32).toString('hex');
+  const user = await authRepository.registerPatient({
+    name,
+    email,
+    passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 12),
+    phone,
+    verificationTokenHash: tokenHash(rawToken),
+    verificationExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    clinicId,
+    createdByUserId: actor.id,
+  });
+  try {
+    await sendVerificationEmail(email, rawToken);
+  } catch (error) {
+    await authRepository.removeUnverifiedPatient(user.id);
+    throw error;
+  }
+  await recordActivity({
+    actor,
+    targetUserId: user.id,
+    eventType: 'patient.registered_by_receptionist',
+    request,
+    details: { clinicId },
+  });
+  return {
+    patientId: user.patient_id,
+    name: user.name,
+    email: user.email,
+    message: 'Patient registered. They must verify their email, then use Forgot password to set their sign-in password.',
+  };
 }
 
 export async function login({ email, password }, request) {
@@ -70,8 +96,10 @@ export async function login({ email, password }, request) {
   }
 
   const sessionId = randomUUID();
-  const expiresAt = new Date(Date.now() + durationMilliseconds(env.JWT_EXPIRES_IN));
-  await authRepository.createSession(user.id, sessionId, expiresAt);
+  const now = Date.now();
+  const expiresAt = new Date(now + env.SESSION_IDLE_TIMEOUT_SECONDS * 1000);
+  const absoluteExpiresAt = new Date(now + env.SESSION_ABSOLUTE_TIMEOUT_DAYS * 24 * 60 * 60 * 1000);
+  await authRepository.createSession(user.id, sessionId, expiresAt, absoluteExpiresAt);
   await recordActivity({
     actor: { id: user.id, role: user.role },
     targetUserId: user.id,
@@ -82,7 +110,7 @@ export async function login({ email, password }, request) {
   const token = jwt.sign(
     { sub: user.id, sid: sessionId, role: user.role },
     env.JWT_SECRET,
-    { expiresIn: env.JWT_EXPIRES_IN },
+    { expiresIn: env.SESSION_IDLE_TIMEOUT_SECONDS },
   );
 
   return {

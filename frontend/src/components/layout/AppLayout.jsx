@@ -10,6 +10,7 @@ export default function AppLayout({ children }) {
   if (pathname.startsWith('/admin')) {
     return <AdminLayout>{children}</AdminLayout>;
   }
+  if (pathname.startsWith('/doctor') || pathname.startsWith('/receptionist')) return children;
   const hideFooter = HIDE_FOOTER_ROUTES.includes(pathname);
 
   return (

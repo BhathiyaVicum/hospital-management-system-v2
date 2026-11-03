@@ -1,7 +1,7 @@
 import * as appointmentsService from '../services/appointmentsService.js';
 
 export async function create(req, res) {
-  const appointment = await appointmentsService.bookAppointment(req.user.patient_id, req.validated.body);
+  const appointment = await appointmentsService.bookAppointment(req.user.patient_id, req.validated.body, req.user.id);
   return res.status(201).json({ data: appointment });
 }
 
@@ -32,6 +32,7 @@ export async function reschedule(req, res) {
     req.user.patient_id,
     req.validated.params.appointmentId,
     req.validated.body.scheduledStart,
+    req.user.id,
   );
   return res.json({ data });
 }

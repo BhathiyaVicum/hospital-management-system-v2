@@ -13,7 +13,9 @@ import adminRoutes from './routes/adminRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import clinicRoutes from './routes/clinicRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
+import doctorWorkspaceRoutes from './routes/doctorWorkspaceRoutes.js';
 import patientRoutes from './routes/patientRoutes.js';
+import receptionistRoutes from './routes/receptionistRoutes.js';
 import specialtyRoutes from './routes/specialtyRoutes.js';
 import staffSupportRoutes from './routes/staffSupportRoutes.js';
 import supportRoutes from './routes/supportRoutes.js';
@@ -48,6 +50,8 @@ export function createApp({ env = getEnv(), healthCheck = () => pool.query('SELE
   app.use('/api/admin', adminRoutes);
   app.use('/api/patients', patientRoutes);
   app.use('/api/doctors', doctorRoutes);
+  app.use('/api/doctor', doctorWorkspaceRoutes);
+  app.use('/api/receptionist', receptionistRoutes);
   app.use('/api/specialties', specialtyRoutes);
   app.use('/api/clinics', clinicRoutes);
   app.use('/api/support', supportRoutes);

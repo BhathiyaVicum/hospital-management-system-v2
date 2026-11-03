@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import AppLayout from './components/layout/AppLayout';
 import HomePage from './pages/HomePage';
 import FindDoctorPage from './pages/FindDoctorPage';
@@ -30,8 +31,34 @@ const AdminReportsPage = lazy(() => import('./pages/AdminReportsPage'));
 const AdminActivityLogsPage = lazy(() => import('./pages/AdminActivityLogsPage'));
 const AdminSupportPage = lazy(() => import('./pages/AdminSupportPage'));
 const AdminSchedulesPage = lazy(() => import('./pages/AdminSchedulesPage'));
+const DoctorDashboardPage = lazy(() => import('./pages/DoctorDashboardPage'));
+const DoctorAppointmentsPage = lazy(() => import('./pages/DoctorAppointmentsPage'));
+const DoctorSchedulePage = lazy(() => import('./pages/DoctorSchedulePage'));
+const ReceptionistDashboardPage = lazy(() => import('./pages/ReceptionistDashboardPage'));
+const ReceptionistAppointmentsPage = lazy(() => import('./pages/ReceptionistAppointmentsPage'));
+const ReceptionistPatientsPage = lazy(() => import('./pages/ReceptionistPatientsPage'));
+const WorkspaceProfilePage = lazy(() => import('./pages/WorkspaceProfilePage'));
 
 function AppShell() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      if (location.pathname !== '/login') {
+        navigate('/login', {
+          replace: true,
+          state: {
+            from: location,
+            message: 'Your session has expired or is no longer active. Please sign in again.',
+          },
+        });
+      }
+    };
+    window.addEventListener('auth:session-expired', handleExpiredSession);
+    return () => window.removeEventListener('auth:session-expired', handleExpiredSession);
+  }, [location, navigate]);
+
   return (
     <Suspense fallback={<div className="px-4 py-16 text-center text-on-surface-variant">Loading workspace...</div>}>
      <AppLayout>
@@ -72,6 +99,16 @@ function AppShell() {
           <Route path="/support/tickets/:ticketId" element={<RequireAuth roles={['patient']}><PatientTicketDetailsPage /></RequireAuth>} />
           <Route path="/staff/support" element={<RequireAuth roles={['staff']}><StaffSupportPage /></RequireAuth>} />
           <Route path="/staff/support/tickets/:ticketId" element={<RequireAuth roles={['staff']}><StaffTicketDetailsPage /></RequireAuth>} />
+          <Route path="/doctor" element={<RequireAuth roles={['doctor']}><Navigate to="/doctor/dashboard" replace /></RequireAuth>} />
+          <Route path="/doctor/dashboard" element={<RequireAuth roles={['doctor']}><DoctorDashboardPage /></RequireAuth>} />
+          <Route path="/doctor/appointments" element={<RequireAuth roles={['doctor']}><DoctorAppointmentsPage /></RequireAuth>} />
+          <Route path="/doctor/schedules" element={<RequireAuth roles={['doctor']}><DoctorSchedulePage /></RequireAuth>} />
+          <Route path="/doctor/profile" element={<RequireAuth roles={['doctor']}><WorkspaceProfilePage role="doctor" /></RequireAuth>} />
+          <Route path="/receptionist" element={<RequireAuth roles={['receptionist']}><Navigate to="/receptionist/dashboard" replace /></RequireAuth>} />
+          <Route path="/receptionist/dashboard" element={<RequireAuth roles={['receptionist']}><ReceptionistDashboardPage /></RequireAuth>} />
+          <Route path="/receptionist/appointments" element={<RequireAuth roles={['receptionist']}><ReceptionistAppointmentsPage /></RequireAuth>} />
+          <Route path="/receptionist/patients" element={<RequireAuth roles={['receptionist']}><ReceptionistPatientsPage /></RequireAuth>} />
+          <Route path="/receptionist/profile" element={<RequireAuth roles={['receptionist']}><WorkspaceProfilePage role="receptionist" /></RequireAuth>} />
         </Routes>
      </AppLayout>
     </Suspense>

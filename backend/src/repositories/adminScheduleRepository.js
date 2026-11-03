@@ -81,9 +81,12 @@ export async function createWeeklySchedule(payload) {
   });
 }
 
-export async function updateWeeklySchedule(availabilityId, payload) {
+export async function updateWeeklySchedule(availabilityId, payload, authorizedDoctorId = null) {
   return withTransaction(async (client) => {
-    const current = await client.query('SELECT id FROM doctor_availability WHERE id = $1 FOR UPDATE', [availabilityId]);
+    const current = await client.query(
+      'SELECT id FROM doctor_availability WHERE id = $1 AND ($2::uuid IS NULL OR doctor_id = $2) FOR UPDATE',
+      [availabilityId, authorizedDoctorId],
+    );
     if (!current.rowCount) return null;
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', [payload.doctorId, String(payload.dayOfWeek)]);
     if (payload.isAvailable) {
@@ -164,12 +167,13 @@ export async function saveScheduleException(payload) {
   });
 }
 
-export async function updateScheduleException(exceptionId, payload) {
+export async function updateScheduleException(exceptionId, payload, authorizedDoctorId = null) {
   return withTransaction(async (client) => {
     const identity = await client.query(
       `SELECT doctor_id AS "doctorId", available_on AS "availableOn"
-       FROM doctor_availability_exceptions WHERE id = $1`,
-      [exceptionId],
+       FROM doctor_availability_exceptions
+       WHERE id = $1 AND ($2::uuid IS NULL OR doctor_id = $2)`,
+      [exceptionId, authorizedDoctorId],
     );
     if (!identity.rowCount) return null;
     await client.query(
@@ -211,12 +215,13 @@ export async function updateScheduleException(exceptionId, payload) {
   });
 }
 
-export async function deleteScheduleException(exceptionId) {
+export async function deleteScheduleException(exceptionId, authorizedDoctorId = null) {
   return withTransaction(async (client) => {
     const identity = await client.query(
       `SELECT doctor_id AS "doctorId", available_on AS "availableOn"
-       FROM doctor_availability_exceptions WHERE id = $1`,
-      [exceptionId],
+       FROM doctor_availability_exceptions
+       WHERE id = $1 AND ($2::uuid IS NULL OR doctor_id = $2)`,
+      [exceptionId, authorizedDoctorId],
     );
     if (!identity.rowCount) return null;
     await client.query(

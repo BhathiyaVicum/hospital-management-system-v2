@@ -65,7 +65,7 @@ const configs = {
     filters: ['specialtyId', 'clinicId'],
     columns: [
       { key: 'name', label: 'Clinician' }, { key: 'title', label: 'Title' },
-      { key: 'specialties', label: 'Specialties', render: (row) => row.specialties?.join(', ') || '—' },
+      { key: 'specialties', label: 'Primary specialty', render: (row) => row.specialties?.[0] || '—' },
       { key: 'clinicId', label: 'Clinic', render: (row, lookups) => lookups.clinics.find((clinic) => clinic.id === row.clinicId)?.name || '—' },
       { key: 'isActive', label: 'Account', render: (row) => <AdminStatus active={row.isActive} /> },
     ],
@@ -79,7 +79,7 @@ const configs = {
       { key: 'currency', label: 'Currency', defaultValue: 'USD', required: true },
       { key: 'image', label: 'Profile image URL', type: 'url' },
       { key: 'clinicId', label: 'Clinic', type: 'select', optionsKey: 'clinics' },
-      { key: 'specialtyIds', label: 'Specialties', type: 'multi', optionsKey: 'specialties' },
+      { key: 'primarySpecialtyId', label: 'Primary specialty', type: 'select', optionsKey: 'specialties', required: true },
       { key: 'timeZone', label: 'Time zone', defaultValue: 'Asia/Colombo', required: true },
       { key: 'languages', label: 'Languages (comma-separated)', type: 'comma' },
       { key: 'education', label: 'Education', type: 'textarea' },
@@ -151,19 +151,21 @@ const configs = {
   },
   receptionists: {
     title: 'Receptionist Management',
-    description: 'Create and maintain receptionist accounts. Receptionist access is limited to this account directory task.',
+    description: 'Create receptionist accounts and limit each account to its assigned clinic locations.',
     list: getAdminReceptionists,
     create: createAdminReceptionist,
     save: updateAdminReceptionist,
     key: 'id',
     columns: [
       { key: 'name', label: 'Receptionist' }, { key: 'email', label: 'Email' },
+      { key: 'clinicIds', label: 'Assigned clinics', render: (row, lookups) => row.clinicIds?.map((id) => lookups.clinics.find((clinic) => clinic.id === id)?.name).filter(Boolean).join(', ') || 'No clinics' },
       { key: 'isActive', label: 'Status', render: (row) => <AdminStatus active={row.isActive} /> },
       { key: 'createdAt', label: 'Created', render: (row) => formatAdminDate(row.createdAt) },
     ],
     fields: [
       { key: 'name', label: 'Full name', required: true }, { key: 'email', label: 'Email', type: 'email', required: true },
       { key: 'password', label: 'Temporary password', type: 'password', requiredOnCreate: true },
+      { key: 'clinicIds', label: 'Assigned clinics', type: 'multi', optionsKey: 'clinics', required: true },
       { ...activeField, updateOnly: true },
     ],
   },
@@ -224,8 +226,8 @@ function RecordForm({ config, record, lookups, saving, onCancel, onSave, error }
                     <span className="text-sm font-medium text-on-surface">{field.label}</span>
                     {field.type === 'textarea' ? <textarea value={values[field.key] || ''} onChange={(event) => update(field.key, event.target.value)} required={field.required} rows={3} className={`${inputClass} h-auto py-2.5`} />
                       : field.type === 'select' || field.type === 'multi' ? (
-                        <select multiple={field.type === 'multi'} value={values[field.key] || (field.type === 'multi' ? [] : '')} onChange={(event) => update(field.key, field.type === 'multi' ? [...event.target.selectedOptions].map((option) => option.value) : event.target.value || null)} className={`${inputClass} ${field.type === 'multi' ? 'h-28' : ''}`}>
-                          {field.type !== 'multi' && <option value="">No clinic assigned</option>}
+                        <select multiple={field.type === 'multi'} required={field.required} value={values[field.key] || (field.type === 'multi' ? [] : '')} onChange={(event) => update(field.key, field.type === 'multi' ? [...event.target.selectedOptions].map((option) => option.value) : event.target.value || null)} className={`${inputClass} ${field.type === 'multi' ? 'h-28' : ''}`}>
+                          {field.type !== 'multi' && <option value="">{field.key === 'clinicId' ? 'No clinic assigned' : 'Select an option'}</option>}
                           {(lookups[field.optionsKey] || []).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                         </select>
                       ) : <input type={field.type === 'comma' ? 'text' : field.type || 'text'} min={field.min} max={field.type === 'password' ? 128 : undefined} minLength={field.type === 'password' ? 12 : undefined} value={values[field.key] ?? ''} onChange={(event) => update(field.key, event.target.value)} required={field.required || (field.requiredOnCreate && createMode)} className={inputClass} />}
@@ -268,7 +270,7 @@ export default function AdminRecordsPage({ resource }) {
   const pageSize = 20;
 
   useEffect(() => {
-    if (resource !== 'doctors' && resource !== 'services') return;
+    if (!['doctors', 'services', 'receptionists'].includes(resource)) return;
     getAdminLookups().then(({ data }) => setLookups(data)).catch((requestError) => setError(requestError.message || 'Unable to load lookup values.'));
   }, [resource]);
 
@@ -365,7 +367,7 @@ export default function AdminRecordsPage({ resource }) {
           timeZone: doctor.timeZone,
           education: doctor.education,
           languages: doctor.languages,
-          specialtyIds: doctor.specialtyIds,
+          primarySpecialtyId: doctor.primarySpecialtyId,
           acceptingAppointments: doctor.acceptingAppointments,
           isActive: updated.isActive,
         });
@@ -383,7 +385,12 @@ export default function AdminRecordsPage({ resource }) {
       } else if (resource === 'staff') {
         await updateAdminStaff(pendingStatus.record.id, { name: pendingStatus.record.name, email: pendingStatus.record.email, isActive: updated.isActive });
       } else {
-        await updateAdminReceptionist(pendingStatus.record.id, { name: pendingStatus.record.name, email: pendingStatus.record.email, isActive: updated.isActive });
+        await updateAdminReceptionist(pendingStatus.record.id, {
+          name: pendingStatus.record.name,
+          email: pendingStatus.record.email,
+          isActive: updated.isActive,
+          clinicIds: pendingStatus.record.clinicIds || [],
+        });
       }
       setPendingStatus(null);
       setNotice(`Account ${updated.isActive ? 'reactivated' : 'deactivated'}.`);
@@ -406,7 +413,7 @@ export default function AdminRecordsPage({ resource }) {
         {error && <AdminNotice>{error}</AdminNotice>}
         <div className="grid gap-5 lg:grid-cols-2">
           <AdminSection title={resource === 'patients' ? 'Patient profile' : 'Professional profile'}>
-            <dl className="grid gap-3 sm:grid-cols-2">{Object.entries(detail).filter(([key, value]) => !['appointments', 'tickets', 'availability', 'specialtyIds', 'languages'].includes(key) && value !== null && typeof value !== 'object').map(([key, value]) => <div key={key} className="rounded-lg bg-surface-container-low p-3"><dt className="text-xs capitalize text-on-surface-variant">{key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}</dt><dd className="mt-1 break-words text-sm font-medium">{typeof value === 'boolean' ? <AdminStatus active={value} /> : String(value)}</dd></div>)}</dl>
+            <dl className="grid gap-3 sm:grid-cols-2">{Object.entries(detail).filter(([key, value]) => !['appointments', 'tickets', 'availability', 'primarySpecialtyId', 'languages'].includes(key) && value !== null && typeof value !== 'object').map(([key, value]) => <div key={key} className="rounded-lg bg-surface-container-low p-3"><dt className="text-xs capitalize text-on-surface-variant">{key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}</dt><dd className="mt-1 break-words text-sm font-medium">{typeof value === 'boolean' ? <AdminStatus active={value} /> : String(value)}</dd></div>)}</dl>
             {resource === 'doctors' && <><p className="mt-4 text-sm"><strong>Specialties:</strong> {detail.specialties?.join(', ') || 'None assigned'}</p><p className="mt-2 text-sm"><strong>Languages:</strong> {detail.languages?.join(', ') || 'Not listed'}</p><p className="mt-2 text-sm"><strong>Total appointments:</strong> {detail.appointmentCount}</p></>}
             <button type="button" onClick={() => openEdit(detail)} className="mt-5 min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-on-primary">Edit record</button>
           </AdminSection>

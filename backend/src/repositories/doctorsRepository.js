@@ -10,15 +10,16 @@ export async function listDoctors({ search = '', specialty = '', location = '', 
   if (search) {
     values.push(`%${escapeLike(search)}%`);
     filters.push(`(u.name ILIKE $${values.length} OR EXISTS (
-      SELECT 1 FROM doctor_specialties ds JOIN specialties s ON s.id = ds.specialty_id
-      WHERE ds.doctor_id = d.id AND s.name ILIKE $${values.length}
+      SELECT 1 FROM specialties specialty
+      WHERE specialty.id = d.primary_specialty_id AND specialty.name ILIKE $${values.length}
     ))`);
   }
   if (specialty) {
     values.push(`%${escapeLike(specialty)}%`);
     filters.push(`EXISTS (
-      SELECT 1 FROM doctor_specialties ds JOIN specialties s ON s.id = ds.specialty_id
-      WHERE ds.doctor_id = d.id AND (s.name ILIKE $${values.length} OR s.slug ILIKE $${values.length})
+      SELECT 1 FROM specialties specialty
+      WHERE specialty.id = d.primary_specialty_id
+        AND (specialty.name ILIKE $${values.length} OR specialty.slug ILIKE $${values.length})
     )`);
   }
   if (location) {
@@ -44,8 +45,7 @@ export async function listDoctors({ search = '', specialty = '', location = '', 
      FROM doctors d
      JOIN users u ON u.id = d.user_id
      LEFT JOIN clinics clinic ON clinic.id = d.clinic_id
-     LEFT JOIN doctor_specialties ds ON ds.doctor_id = d.id
-     LEFT JOIN specialties s ON s.id = ds.specialty_id
+     LEFT JOIN specialties s ON s.id = d.primary_specialty_id
      WHERE ${whereClause}
      GROUP BY d.id, u.id, clinic.id
      ORDER BY d.rating DESC, u.name ASC
@@ -65,8 +65,7 @@ export async function getDoctorById(doctorId) {
      FROM doctors d
      JOIN users u ON u.id = d.user_id
      LEFT JOIN clinics clinic ON clinic.id = d.clinic_id
-     LEFT JOIN doctor_specialties ds ON ds.doctor_id = d.id
-     LEFT JOIN specialties s ON s.id = ds.specialty_id
+     LEFT JOIN specialties s ON s.id = d.primary_specialty_id
      WHERE d.id = $1 AND d.is_accepting_appointments = TRUE
        AND d.approval_status = 'approved' AND u.is_active = TRUE AND u.email_verified_at IS NOT NULL
      GROUP BY d.id, u.id, clinic.id`,
@@ -79,8 +78,7 @@ export async function listSpecialties() {
   const result = await query(
     `SELECT s.id, s.name, s.slug, s.description, count(d.id)::int AS "doctorCount"
      FROM specialties s
-     LEFT JOIN doctor_specialties ds ON ds.specialty_id = s.id
-     LEFT JOIN doctors d ON d.id = ds.doctor_id
+     LEFT JOIN doctors d ON d.primary_specialty_id = s.id
        AND d.approval_status = 'approved' AND d.is_accepting_appointments = TRUE
      GROUP BY s.id
      ORDER BY s.name`,

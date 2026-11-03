@@ -23,17 +23,42 @@ export async function authenticate(req, res, next) {
     const result = await query(
       `SELECT u.id, u.name, u.email, u.role, u.email_verified_at, u.is_active,
               u.must_change_password,
-              s.id AS session_id, p.id AS patient_id
+              s.id AS session_id, s.expires_at AS session_expires_at,
+              s.absolute_expires_at, p.id AS patient_id
        FROM auth_sessions s
        JOIN users u ON u.id = s.user_id
        LEFT JOIN patients p ON p.user_id = u.id
        WHERE s.id = $1 AND s.user_id = $2 AND s.revoked_at IS NULL
-         AND s.expires_at > now() AND u.is_active = TRUE`,
+         AND s.expires_at > now() AND s.absolute_expires_at > now()
+         AND u.is_active = TRUE`,
       [claims.sid, claims.sub],
     );
 
     if (!result.rowCount) return res.status(401).json({ message: 'Session is invalid or expired.' });
     req.user = result.rows[0];
+    const now = Date.now();
+    const idleTimeout = req.env.SESSION_IDLE_TIMEOUT_SECONDS * 1000;
+    const expiresAt = new Date(req.user.session_expires_at).getTime();
+    if (expiresAt - now <= idleTimeout / 2) {
+      const absoluteExpiresAt = new Date(req.user.absolute_expires_at).getTime();
+      const renewedExpiry = await query(
+        `UPDATE auth_sessions
+         SET expires_at = LEAST($2::timestamptz, absolute_expires_at)
+         WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()
+           AND absolute_expires_at > now()
+         RETURNING expires_at`,
+        [req.user.session_id, new Date(now + idleTimeout)],
+      );
+      if (!renewedExpiry.rowCount) return res.status(401).json({ message: 'Session is invalid or expired.' });
+      const refreshedExpiresAt = new Date(renewedExpiry.rows[0].expires_at);
+      const tokenExpiresIn = Math.max(1, Math.floor((Math.min(refreshedExpiresAt.getTime(), absoluteExpiresAt) - now) / 1000));
+      const refreshedToken = jwt.sign(
+        { sub: req.user.id, sid: req.user.session_id, role: req.user.role },
+        req.env.JWT_SECRET,
+        { expiresIn: tokenExpiresIn },
+      );
+      res.cookie(SESSION_COOKIE, refreshedToken, cookieOptions(req.env, refreshedExpiresAt));
+    }
     const allowedDuringPasswordChange = [
       '/api/auth/me',
       '/api/auth/logout',

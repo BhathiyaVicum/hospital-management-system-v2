@@ -1,6 +1,6 @@
 import * as appointmentsRepository from '../repositories/appointmentsRepository.js';
 
-export async function bookAppointment(patientId, payload) {
+export async function bookAppointment(patientId, payload, userId) {
   if (!patientId) {
     const error = new Error('A patient account is required to book an appointment.');
     error.status = 403;
@@ -11,6 +11,7 @@ export async function bookAppointment(patientId, payload) {
     doctorId: payload.doctorId,
     scheduledStart: payload.scheduledStart,
     reason: payload.reason,
+    createdByUserId: userId,
   });
   if (result.unavailable) {
     const error = new Error('The selected appointment time is unavailable. Choose another date or time.');
@@ -59,13 +60,13 @@ export async function cancelAppointment(patientId, appointmentId, userId) {
   return appointment;
 }
 
-export async function rescheduleAppointment(patientId, appointmentId, scheduledStart) {
+export async function rescheduleAppointment(patientId, appointmentId, scheduledStart, userId) {
   if (!patientId) {
     const error = new Error('A patient account is required to reschedule appointments.');
     error.status = 403;
     throw error;
   }
-  const result = await appointmentsRepository.reschedulePatientAppointment(patientId, appointmentId, scheduledStart);
+  const result = await appointmentsRepository.reschedulePatientAppointment(patientId, appointmentId, scheduledStart, userId);
   if (result.unavailable) {
     const error = new Error('The appointment cannot be rescheduled to that time.');
     error.status = 409;

@@ -6,6 +6,8 @@ function homeForRole(role) {
   if (role === 'patient') return '/dashboard';
   if (role === 'staff') return '/staff/support';
   if (role === 'admin') return '/admin/dashboard';
+  if (role === 'doctor') return '/doctor/dashboard';
+  if (role === 'receptionist') return '/receptionist/dashboard';
   return '/';
 }
 
@@ -39,7 +41,7 @@ export default function RequireAuth({ roles, children }) {
     return <div className="mx-auto max-w-7xl px-4 py-16 text-center text-on-surface-variant">Checking your secure session...</div>;
   }
   if (!user && !error) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    return <Navigate to="/login" replace state={{ from: location, message: 'Your session has expired or is no longer active. Please sign in again.' }} />;
   }
   if (error) {
     return <div role="alert" className="mx-auto max-w-3xl px-4 py-16 text-center text-red-700">{error}</div>;

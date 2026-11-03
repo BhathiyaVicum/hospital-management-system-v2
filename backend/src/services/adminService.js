@@ -56,7 +56,7 @@ export async function getDoctor(doctorId) {
 }
 
 export async function createDoctor(payload, actor, request) {
-  await validateReferences({ clinicId: payload.clinicId, specialtyIds: payload.specialtyIds });
+  await validateReferences({ clinicId: payload.clinicId, specialtyIds: [payload.primarySpecialtyId] });
   const doctor = await adminRepository.createDoctor({
     ...payload,
     passwordHash: await bcrypt.hash(payload.password, 12),
@@ -69,7 +69,7 @@ export async function createDoctor(payload, actor, request) {
 }
 
 export async function updateDoctor(doctorId, payload, actor, request) {
-  await validateReferences({ clinicId: payload.clinicId, specialtyIds: payload.specialtyIds });
+  await validateReferences({ clinicId: payload.clinicId, specialtyIds: [payload.primarySpecialtyId] });
   const doctor = await adminRepository.updateDoctor(doctorId, payload);
   if (!doctor) throw notFound();
   const detail = await adminRepository.getDoctor(doctorId);
@@ -114,6 +114,7 @@ export async function listAccounts(role, filters) {
 }
 
 export async function createAccount(role, payload, actor, request) {
+  if (role === 'receptionist') await validateReferences({ clinicIds: payload.clinicIds });
   const account = await adminRepository.createAccount({
     ...payload,
     role,
@@ -131,6 +132,7 @@ export async function updateAccount(role, userId, payload, actor, request) {
   if (actor.id === userId && !payload.isActive) {
     throw httpError('You cannot deactivate your own administrator account.', 409);
   }
+  if (role === 'receptionist') await validateReferences({ clinicIds: payload.clinicIds });
   const account = await adminRepository.updateAccount(userId, role, payload);
   if (!account) throw notFound();
   await recordActivity({

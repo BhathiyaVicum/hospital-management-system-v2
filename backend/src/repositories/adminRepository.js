@@ -55,8 +55,7 @@ export async function getDashboard() {
     query(
       `SELECT specialty.name, count(DISTINCT doctor.id)::int AS count
        FROM specialties specialty
-       LEFT JOIN doctor_specialties link ON link.specialty_id = specialty.id
-       LEFT JOIN doctors doctor ON doctor.id = link.doctor_id
+       LEFT JOIN doctors doctor ON doctor.primary_specialty_id = specialty.id
        GROUP BY specialty.id ORDER BY count DESC, specialty.name LIMIT 8`,
     ),
     query(
@@ -179,18 +178,17 @@ const DOCTOR_SELECT = `SELECT d.id, u.id AS "userId", u.name, u.email, u.is_acti
   d.consultation_fee AS "consultationFee", d.currency, d.profile_image_url AS "image",
   d.time_zone AS "timeZone", d.education, d.languages, d.is_accepting_appointments AS "acceptingAppointments",
   d.approval_status AS "approvalStatus", d.created_at AS "createdAt",
-  COALESCE(array_agg(DISTINCT ds.specialty_id) FILTER (WHERE ds.specialty_id IS NOT NULL), '{}') AS "specialtyIds",
+  d.primary_specialty_id AS "primarySpecialtyId",
   COALESCE(array_agg(DISTINCT specialty.name) FILTER (WHERE specialty.id IS NOT NULL), '{}') AS specialties
   FROM doctors d JOIN users u ON u.id = d.user_id
-  LEFT JOIN doctor_specialties ds ON ds.doctor_id = d.id
-  LEFT JOIN specialties specialty ON specialty.id = ds.specialty_id`;
+  LEFT JOIN specialties specialty ON specialty.id = d.primary_specialty_id`;
 
 export async function listDoctors({ search = '', specialtyId = '', clinicId = '', status = '', limit, offset }) {
   const filters = [];
   const values = [];
   if (search) addFilter(filters, values, `(u.name ILIKE ? OR u.email ILIKE ? OR d.professional_title ILIKE ?)`,
     `%${escapeLike(search)}%`);
-  if (specialtyId) addFilter(filters, values, `EXISTS (SELECT 1 FROM doctor_specialties ds WHERE ds.doctor_id = d.id AND ds.specialty_id = ?)`, specialtyId);
+  if (specialtyId) addFilter(filters, values, `d.primary_specialty_id = ?`, specialtyId);
   if (clinicId) addFilter(filters, values, `d.clinic_id = ?`, clinicId);
   if (status === 'active' || status === 'inactive') addFilter(filters, values, `u.is_active = ?`, status === 'active');
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
@@ -228,16 +226,18 @@ export async function createDoctor(payload) {
     const doctor = await client.query(
       `INSERT INTO doctors
          (user_id, clinic_id, professional_title, bio, years_of_experience, consultation_fee,
+          primary_specialty_id,
           currency, profile_image_url, time_zone, education, languages, approval_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'approved')
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'approved')
        RETURNING id`,
       [user.rows[0].id, payload.clinicId || null, payload.title, payload.bio || '',
-        payload.yearsOfExperience ?? null, payload.consultationFee, payload.currency,
+        payload.yearsOfExperience ?? null, payload.consultationFee, payload.primarySpecialtyId, payload.currency,
         payload.image || null, payload.timeZone, payload.education || '', payload.languages || []],
     );
-    for (const specialtyId of payload.specialtyIds) {
-      await client.query('INSERT INTO doctor_specialties (doctor_id, specialty_id) VALUES ($1, $2)', [doctor.rows[0].id, specialtyId]);
-    }
+    await client.query(
+      'INSERT INTO doctor_specialties (doctor_id, specialty_id) VALUES ($1, $2)',
+      [doctor.rows[0].id, payload.primarySpecialtyId],
+    );
     return { ...doctor.rows[0], userId: user.rows[0].id };
   });
 }
@@ -253,20 +253,22 @@ export async function updateDoctor(doctorId, payload) {
     await client.query(
       `UPDATE doctors SET clinic_id = $2, professional_title = $3, bio = $4,
        years_of_experience = $5, consultation_fee = $6, currency = $7, profile_image_url = $8,
-       time_zone = $9, education = $10, languages = $11, is_accepting_appointments = $12
+       time_zone = $9, education = $10, languages = $11, is_accepting_appointments = $12,
+       primary_specialty_id = $13
        WHERE id = $1`,
       [doctorId, payload.clinicId || null, payload.title, payload.bio || '',
         payload.yearsOfExperience ?? null, payload.consultationFee, payload.currency,
         payload.image || null, payload.timeZone, payload.education || '', payload.languages || [],
-        payload.acceptingAppointments],
+        payload.acceptingAppointments, payload.primarySpecialtyId],
     );
     if (!payload.isActive) {
       await client.query('UPDATE auth_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL', [doctor.rows[0].user_id]);
     }
     await client.query('DELETE FROM doctor_specialties WHERE doctor_id = $1', [doctorId]);
-    for (const specialtyId of payload.specialtyIds) {
-      await client.query('INSERT INTO doctor_specialties (doctor_id, specialty_id) VALUES ($1, $2)', [doctorId, specialtyId]);
-    }
+    await client.query(
+      'INSERT INTO doctor_specialties (doctor_id, specialty_id) VALUES ($1, $2)',
+      [doctorId, payload.primarySpecialtyId],
+    );
     return { id: doctorId };
   });
 }
@@ -369,8 +371,11 @@ export async function listAccounts(role, { search = '', status = '', limit, offs
       `SELECT u.id, u.name, u.email, u.is_active AS "isActive", u.created_at AS "createdAt",
               u.updated_at AS "updatedAt",
               count(DISTINCT t.id)::int AS "assignedTickets",
-              count(DISTINCT t.id) FILTER (WHERE t.status IN ('open','in_progress','waiting_for_patient'))::int AS "activeTickets"
+              count(DISTINCT t.id) FILTER (WHERE t.status IN ('open','in_progress','waiting_for_patient'))::int AS "activeTickets",
+              COALESCE(array_agg(DISTINCT receptionist_clinic.clinic_id)
+                FILTER (WHERE receptionist_clinic.clinic_id IS NOT NULL), '{}') AS "clinicIds"
        FROM users u LEFT JOIN support_tickets t ON t.assigned_staff_id = u.id
+       LEFT JOIN receptionist_clinics receptionist_clinic ON receptionist_clinic.receptionist_user_id = u.id
        ${where} GROUP BY u.id ORDER BY u.created_at DESC LIMIT $${p - 1} OFFSET $${p}`,
       [...values, limit, offset],
     ),
@@ -379,17 +384,27 @@ export async function listAccounts(role, { search = '', status = '', limit, offs
   return { records: rows.rows, total: count.rows[0].total };
 }
 
-export async function createAccount({ name, email, role, passwordHash }) {
-  const result = await query(
-    `INSERT INTO users (name, email, role, password_hash, email_verified_at, must_change_password)
-     VALUES ($1, $2, $3, $4, now(), TRUE)
-     RETURNING id, name, email, role, is_active AS "isActive", created_at AS "createdAt"`,
-    [name, email, role, passwordHash],
-  );
-  return result.rows[0];
+export async function createAccount({ name, email, role, passwordHash, clinicIds = [] }) {
+  return withTransaction(async (client) => {
+    const result = await client.query(
+      `INSERT INTO users (name, email, role, password_hash, email_verified_at, must_change_password)
+       VALUES ($1, $2, $3, $4, now(), TRUE)
+       RETURNING id, name, email, role, is_active AS "isActive", created_at AS "createdAt"`,
+      [name, email, role, passwordHash],
+    );
+    if (role === 'receptionist') {
+      for (const clinicId of clinicIds) {
+        await client.query(
+          'INSERT INTO receptionist_clinics (receptionist_user_id, clinic_id) VALUES ($1, $2)',
+          [result.rows[0].id, clinicId],
+        );
+      }
+    }
+    return result.rows[0];
+  });
 }
 
-export async function updateAccount(id, role, { name, email, isActive }) {
+export async function updateAccount(id, role, { name, email, isActive, clinicIds = [] }) {
   return withTransaction(async (client) => {
     const result = await client.query(
       `UPDATE users SET name=$3, email=$4, is_active=$5
@@ -399,6 +414,15 @@ export async function updateAccount(id, role, { name, email, isActive }) {
     );
     if (result.rowCount && !isActive) {
       await client.query('UPDATE auth_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL', [id]);
+    }
+    if (result.rowCount && role === 'receptionist') {
+      await client.query('DELETE FROM receptionist_clinics WHERE receptionist_user_id = $1', [id]);
+      for (const clinicId of clinicIds) {
+        await client.query(
+          'INSERT INTO receptionist_clinics (receptionist_user_id, clinic_id) VALUES ($1, $2)',
+          [id, clinicId],
+        );
+      }
     }
     return result.rows[0] || null;
   });
@@ -470,8 +494,7 @@ export async function getReports({ from, to }) {
        count(DISTINCT d.id) FILTER (WHERE u.is_active)::int AS active,
        count(DISTINCT d.id) FILTER (WHERE NOT u.is_active)::int AS inactive
        FROM specialties specialty
-       LEFT JOIN doctor_specialties ds ON ds.specialty_id=specialty.id
-       LEFT JOIN doctors d ON d.id=ds.doctor_id LEFT JOIN users u ON u.id=d.user_id
+       LEFT JOIN doctors d ON d.primary_specialty_id=specialty.id LEFT JOIN users u ON u.id=d.user_id
        GROUP BY specialty.id ORDER BY doctors DESC, specialty.name`,
     ),
     query(

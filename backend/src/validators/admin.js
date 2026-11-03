@@ -57,7 +57,7 @@ const doctorFields = {
   timeZone: z.string().trim().min(1).max(80).default('Asia/Colombo'),
   education: z.string().trim().max(2000).optional().default(''),
   languages: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
-  specialtyIds: z.array(uuid).max(20),
+  primarySpecialtyId: uuid,
 };
 export const createDoctorSchema = z.object({
   body: z.object({ ...doctorFields, password }).strict(),
@@ -103,9 +103,16 @@ export const updateServiceSchema = z.object({
 
 export const accountListSchema = z.object({ query: z.object(page) });
 export const createAccountSchema = z.object({ body: z.object({ name, email, password }).strict() });
+export const createReceptionistSchema = z.object({
+  body: z.object({ name, email, password, clinicIds: z.array(uuid).min(1).max(100) }).strict(),
+});
 export const updateAccountSchema = z.object({
   params: z.object({ userId: uuid }),
   body: z.object({ name, email, isActive: z.boolean() }).strict(),
+});
+export const updateReceptionistSchema = z.object({
+  params: z.object({ userId: uuid }),
+  body: z.object({ name, email, isActive: z.boolean(), clinicIds: z.array(uuid).min(1).max(100) }).strict(),
 });
 
 export const appointmentListSchema = z.object({

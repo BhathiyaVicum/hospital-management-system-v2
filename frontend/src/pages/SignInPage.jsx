@@ -23,14 +23,35 @@ export default function SignInPage() {
       const { user } = await loginUser(form);
       if (user.mustChangePassword) {
         navigate('/change-password', { replace: true });
-      } else if (user.role === 'admin') {
-        navigate('/admin/dashboard', { replace: true });
-      } else if (user.role === 'patient') {
-        navigate('/dashboard', { replace: true });
-      } else if (user.role === 'staff') {
-        navigate('/staff/support', { replace: true });
       } else {
-        navigate('/', { replace: true });
+        const from = location.state?.from;
+        const requestedPath = from?.pathname || '';
+        const rolePrefixes = {
+          admin: '/admin/',
+          doctor: '/doctor/',
+          receptionist: '/receptionist/',
+          staff: '/staff/',
+        };
+        const canReturnTo = from && (user.role === 'patient'
+          ? requestedPath === '/dashboard' || requestedPath.startsWith('/appointments')
+            || requestedPath.startsWith('/profile') || requestedPath.startsWith('/support')
+            || (requestedPath.startsWith('/doctors/') && requestedPath.endsWith('/book'))
+          : Boolean(rolePrefixes[user.role] && requestedPath.startsWith(rolePrefixes[user.role])));
+        if (canReturnTo) {
+          navigate({ pathname: from.pathname, search: from.search || '', hash: from.hash || '' }, { replace: true });
+        } else if (user.role === 'admin') {
+          navigate('/admin/dashboard', { replace: true });
+        } else if (user.role === 'patient') {
+          navigate('/dashboard', { replace: true });
+        } else if (user.role === 'staff') {
+          navigate('/staff/support', { replace: true });
+        } else if (user.role === 'doctor') {
+          navigate('/doctor/dashboard', { replace: true });
+        } else if (user.role === 'receptionist') {
+          navigate('/receptionist/dashboard', { replace: true });
+        } else {
+          navigate('/', { replace: true });
+        }
       }
     } catch (error) {
       setMessage(error.message || 'Unable to sign in.');

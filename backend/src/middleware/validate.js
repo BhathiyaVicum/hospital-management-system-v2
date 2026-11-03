@@ -1,9 +1,21 @@
+function normalizeEmptyStrings(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeEmptyStrings(item));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [key, normalizeEmptyStrings(nestedValue)]),
+    );
+  }
+  return value === '' ? undefined : value;
+}
+
 export function validate(schema) {
   return (req, res, next) => {
     const result = schema.safeParse({
-      body: req.body,
-      params: req.params,
-      query: req.query,
+      body: normalizeEmptyStrings(req.body),
+      params: normalizeEmptyStrings(req.params),
+      query: normalizeEmptyStrings(req.query),
     });
 
     if (!result.success) {

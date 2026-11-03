@@ -25,6 +25,7 @@ import {
   clinicListSchema,
   clinicParamsSchema,
   createAccountSchema,
+  createReceptionistSchema,
   createClinicSchema,
   createDoctorSchema,
   createServiceSchema,
@@ -37,6 +38,7 @@ import {
   serviceListSchema,
   serviceParamsSchema,
   updateAccountSchema,
+  updateReceptionistSchema,
   updateClinicSchema,
   updateDoctorSchema,
   updateServiceSchema,
@@ -70,8 +72,8 @@ router.post('/staff', validate(createAccountSchema), controller.createStaff);
 router.patch('/staff/:userId', validate(accountParamsSchema.merge(updateAccountSchema)), controller.updateStaff);
 
 router.get('/receptionists', validate(accountListSchema), controller.receptionists);
-router.post('/receptionists', validate(createAccountSchema), controller.createReceptionist);
-router.patch('/receptionists/:userId', validate(accountParamsSchema.merge(updateAccountSchema)), controller.updateReceptionist);
+router.post('/receptionists', validate(createReceptionistSchema), controller.createReceptionist);
+router.patch('/receptionists/:userId', validate(updateReceptionistSchema), controller.updateReceptionist);
 
 router.get('/appointments', validate(appointmentListSchema), controller.appointments);
 router.get('/appointments/:appointmentId', validate(appointmentParamsSchema), controller.appointment);
