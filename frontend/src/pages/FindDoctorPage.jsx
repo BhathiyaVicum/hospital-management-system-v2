@@ -36,6 +36,7 @@ export default function FindDoctorPage() {
 
   useEffect(() => {
     let ignore = false;
+
     async function loadDoctors() {
       try {
         setLoading(true);
@@ -45,21 +46,39 @@ export default function FindDoctorPage() {
           limit: 20,
         });
         const listedDoctors = response.data || [];
+
+        // Fetch availability per doctor, but don't let one failure
+        // collapse the whole list. allSettled keeps every doctor and
+        // marks the ones whose availability call failed.
         const doctorsWithAvailability = submittedFilter.date
-          ? await Promise.all(listedDoctors.map(async (doctor) => {
-            const availability = await getAvailability(doctor.id);
-            const slot = availability.data?.slots?.find((item) => item.date === submittedFilter.date);
-            return {
-              ...doctor,
-              nextAvailable: slot ? `${slot.day} · ${slot.time}` : 'No openings on this date',
-              availableOnSelectedDate: Boolean(slot),
-            };
-          }))
+          ? (await Promise.allSettled(
+              listedDoctors.map(async (doctor) => {
+                const availability = await getAvailability(doctor.id);
+                const slot = availability.data?.slots?.find(
+                  (item) => item.date === submittedFilter.date,
+                );
+                return {
+                  ...doctor,
+                  nextAvailable: slot ? `${slot.day} · ${slot.time}` : 'No openings on this date',
+                  availableOnSelectedDate: Boolean(slot),
+                };
+              }),
+            )).map((result, index) => {
+              if (result.status === 'fulfilled') return result.value;
+              const doctor = listedDoctors[index];
+              return {
+                ...doctor,
+                nextAvailable: 'Availability unavailable',
+                // Keep the doctor visible; better UX than silently dropping them
+                availableOnSelectedDate: true,
+              };
+            })
           : listedDoctors.map((doctor) => ({
-            ...doctor,
-            nextAvailable: 'View profile for current openings',
-            availableOnSelectedDate: true,
-          }));
+              ...doctor,
+              nextAvailable: 'View profile for current openings',
+              availableOnSelectedDate: true,
+            }));
+
         if (!ignore) {
           setDoctors(doctorsWithAvailability.filter((doctor) => doctor.availableOnSelectedDate));
           setError('');
@@ -97,11 +116,21 @@ export default function FindDoctorPage() {
           </div>
 
           <div className="rounded-2xl bg-surface-container-lowest p-4 shadow-sm ring-1 ring-slate-200 lg:p-6">
-            <form className="grid gap-4 md:grid-cols-12 md:items-end" onSubmit={(event) => { event.preventDefault(); setSubmittedFilter(filter); }}>
+            <form
+              className="grid gap-4 md:grid-cols-12 md:items-end"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setSubmittedFilter(filter);
+              }}
+            >
               <div className="md:col-span-4">
-                <label className="mb-2 block text-sm font-medium text-on-surface">Specialty or doctor</label>
+                <label className="mb-2 block text-sm font-medium text-on-surface">
+                  Specialty or doctor
+                </label>
                 <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant">search</span>
+                  <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant">
+                    search
+                  </span>
                   <input
                     type="text"
                     name="specialty"
@@ -113,9 +142,11 @@ export default function FindDoctorPage() {
                 </div>
               </div>
 
-              {/* Clinic / Location — dropdown */}
               <div className="md:col-span-3">
-                <label htmlFor="find-clinic" className="mb-2 flex items-center gap-2 text-sm font-medium text-on-surface">
+                <label
+                  htmlFor="find-clinic"
+                  className="mb-2 flex items-center gap-2 text-sm font-medium text-on-surface"
+                >
                   <span className="material-symbols-outlined text-lg text-primary">location_on</span>
                   Clinic / Location
                 </label>
@@ -132,15 +163,21 @@ export default function FindDoctorPage() {
                       <option key={clinic.id} value={clinic.name}>{clinic.name}</option>
                     ))}
                   </select>
-                  <span className="material-symbols-outlined pointer-events-none absolute left-3 top-3 text-on-surface-variant">location_on</span>
-                  <span className="material-symbols-outlined pointer-events-none absolute right-2 top-3 text-on-surface-variant">expand_more</span>
+                  <span className="material-symbols-outlined pointer-events-none absolute left-3 top-3 text-on-surface-variant">
+                    location_on
+                  </span>
+                  <span className="material-symbols-outlined pointer-events-none absolute right-2 top-3 text-on-surface-variant">
+                    expand_more
+                  </span>
                 </div>
               </div>
 
               <div className="md:col-span-3">
                 <label className="mb-2 block text-sm font-medium text-on-surface">Select date</label>
                 <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant">calendar_month</span>
+                  <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant">
+                    calendar_month
+                  </span>
                   <input
                     type="date"
                     name="date"
@@ -152,7 +189,10 @@ export default function FindDoctorPage() {
               </div>
 
               <div className="md:col-span-2">
-                <button type="submit" className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-on-primary shadow-sm transition hover:bg-primary-container">
+                <button
+                  type="submit"
+                  className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-on-primary shadow-sm transition hover:bg-primary-container"
+                >
                   Search
                 </button>
               </div>
@@ -178,9 +218,16 @@ export default function FindDoctorPage() {
         ) : (
           <div className="grid gap-6 xl:grid-cols-2">
             {visibleDoctors.map((doctor) => (
-              <div key={doctor.id} className="rounded-2xl border border-slate-200 bg-surface-container-lowest p-4 shadow-sm lg:p-5">
+              <div
+                key={doctor.id}
+                className="rounded-2xl border border-slate-200 bg-surface-container-lowest p-4 shadow-sm lg:p-5"
+              >
                 <div className="flex flex-col gap-4 sm:flex-row">
-                  <img src={doctor.image} alt={doctor.name} className="h-32 w-32 rounded-2xl object-cover" />
+                  <img
+                    src={doctor.image}
+                    alt={doctor.name}
+                    className="h-32 w-32 rounded-2xl object-cover"
+                  />
 
                   <div className="flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -195,25 +242,42 @@ export default function FindDoctorPage() {
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-on-surface-variant">
-                      <span className="rounded-full bg-surface-container px-2.5 py-1">{doctor.specialties?.join(', ') || 'Specialty not listed'}</span>
-                      <span className="rounded-full bg-surface-container px-2.5 py-1">{doctor.experience}</span>
-                      <span className="rounded-full bg-surface-container px-2.5 py-1">{doctor.location}</span>
+                      <span className="rounded-full bg-surface-container px-2.5 py-1">
+                        {doctor.specialties?.join(', ') || 'Specialty not listed'}
+                      </span>
+                      <span className="rounded-full bg-surface-container px-2.5 py-1">
+                        {doctor.experience}
+                      </span>
+                      <span className="rounded-full bg-surface-container px-2.5 py-1">
+                        {doctor.location}
+                      </span>
                     </div>
 
-                    <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">{doctor.bio}</p>
+                    <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+                      {doctor.bio}
+                    </p>
 
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                       <div className="text-sm text-on-surface-variant">
-                        <span className="font-semibold text-on-surface">Next available:</span> {doctor.nextAvailable}
+                        <span className="font-semibold text-on-surface">Next available:</span>{' '}
+                        {doctor.nextAvailable}
                       </div>
-                      <div className="text-lg font-semibold text-on-surface">{doctor.consultationFee}</div>
+                      <div className="text-lg font-semibold text-on-surface">
+                        {doctor.consultationFee}
+                      </div>
                     </div>
 
                     <div className="mt-5 flex gap-3">
-                      <Link to={`/doctors/${doctor.id}`} className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary hover:bg-primary-container">
+                      <Link
+                        to={`/doctors/${doctor.id}`}
+                        className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary hover:bg-primary-container"
+                      >
                         View profile
                       </Link>
-                      <Link to={`/doctors/${doctor.id}/book`} className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container">
+                      <Link
+                        to={`/doctors/${doctor.id}/book`}
+                        className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container"
+                      >
                         Book visit
                       </Link>
                     </div>

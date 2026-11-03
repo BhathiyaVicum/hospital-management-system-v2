@@ -24,6 +24,8 @@ import StaffSupportPage from './pages/StaffSupportPage';
 import StaffTicketDetailsPage from './pages/StaffTicketDetailsPage';
 import BookAppointmentPage from './pages/BookAppointmentPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import PatientFindDoctorPage from './pages/PatientFindDoctorPage';
+
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 const AdminRecordsPage = lazy(() => import('./pages/AdminRecordsPage'));
 const AdminAppointmentsPage = lazy(() => import('./pages/AdminAppointmentsPage'));
@@ -74,6 +76,8 @@ function AppShell() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/change-password" element={<RequireAuth roles={['patient', 'doctor', 'staff', 'receptionist', 'admin']}><ChangePasswordPage /></RequireAuth>} />
+          <Route path="/dashboard" element={<RequireAuth roles={['patient']}><PatientDashboardPage /></RequireAuth>} />
+          <Route path="/dashboard/find-doctor" element={<RequireAuth roles={['patient']}><PatientFindDoctorPage /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth roles={['admin']}><Navigate to="/admin/dashboard" replace /></RequireAuth>} />
           <Route path="/admin/dashboard" element={<RequireAuth roles={['admin']}><AdminDashboardPage /></RequireAuth>} />
           <Route path="/admin/patients" element={<RequireAuth roles={['admin']}><AdminRecordsPage resource="patients" /></RequireAuth>} />
