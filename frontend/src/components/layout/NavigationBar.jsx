@@ -123,7 +123,7 @@ export default function NavigationBar() {
   };
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 bg-surface/90 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-xl">
+    <header className="fixed inset-x-0 top-0 z-50 bg-surface/90 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-xl border-b border-slate-300">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3 lg:gap-6">
           <Link to="/" onClick={closeMenu} className="flex shrink-0 items-center gap-2 sm:gap-3">

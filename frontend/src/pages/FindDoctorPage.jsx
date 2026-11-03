@@ -253,10 +253,6 @@ export default function FindDoctorPage() {
                       </span>
                     </div>
 
-                    <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
-                      {doctor.bio}
-                    </p>
-
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                       <div className="text-sm text-on-surface-variant">
                         <span className="font-semibold text-on-surface">Next available:</span>{' '}

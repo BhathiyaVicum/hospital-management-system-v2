@@ -51,7 +51,6 @@ const doctorFields = {
   bio: z.string().trim().max(5000).optional().default(''),
   yearsOfExperience: z.number().int().min(0).max(80).nullable().optional(),
   consultationFee: z.number().min(0).max(99999999).finite(),
-  currency: z.string().trim().length(3).toUpperCase().default('USD'),
   image: z.string().url().max(2048).nullable().optional(),
   clinicId: uuid.nullable().optional(),
   timeZone: z.string().trim().min(1).max(80).default('Asia/Colombo'),
@@ -91,7 +90,6 @@ const serviceFields = {
   description: z.string().trim().max(3000).default(''),
   durationMinutes: z.number().int().min(10).max(480).default(30),
   fee: z.number().min(0).max(99999999).finite(),
-  currency: z.string().trim().length(3).toUpperCase().default('USD'),
   clinicIds: z.array(uuid).max(100).default([]),
   doctorIds: z.array(uuid).max(500).default([]),
 };

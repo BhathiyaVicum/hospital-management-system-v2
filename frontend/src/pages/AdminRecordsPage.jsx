@@ -76,7 +76,6 @@ const configs = {
       { key: 'title', label: 'Professional title', required: true },
       { key: 'yearsOfExperience', label: 'Years of experience', type: 'number', min: 0 },
       { key: 'consultationFee', label: 'Consultation fee', type: 'number', min: 0, required: true },
-      { key: 'currency', label: 'Currency', defaultValue: 'USD', required: true },
       { key: 'image', label: 'Profile image URL', type: 'url' },
       { key: 'clinicId', label: 'Clinic', type: 'select', optionsKey: 'clinics' },
       { key: 'primarySpecialtyId', label: 'Primary specialty', type: 'select', optionsKey: 'specialties', required: true },
@@ -124,7 +123,6 @@ const configs = {
       { key: 'name', label: 'Service name', required: true }, { key: 'slug', label: 'Service code', required: true },
       { key: 'durationMinutes', label: 'Duration (minutes)', type: 'number', min: 10, defaultValue: 30, required: true },
       { key: 'fee', label: 'Fee', type: 'number', min: 0, required: true },
-      { key: 'currency', label: 'Currency', defaultValue: 'USD', required: true },
       { key: 'description', label: 'Clinical notes', type: 'textarea' },
       { key: 'clinicIds', label: 'Associated clinics', type: 'multi', optionsKey: 'clinics', updateOnly: true },
       { key: 'doctorIds', label: 'Associated doctors', type: 'multi', optionsKey: 'doctors', updateOnly: true },
@@ -185,6 +183,13 @@ function getDefaultValues(config, record, createMode) {
 
 function presentPayload(config, values) {
   const payload = { ...values };
+  
+  for (const field of config.fields) {
+    if (field.requiredOnCreate && (payload[field.key] === '' || payload[field.key] === undefined)) {
+      delete payload[field.key];
+    }
+  }
+
   for (const field of config.fields) {
     if (field.type === 'number') {
       payload[field.key] = payload[field.key] === '' || payload[field.key] === undefined
@@ -361,7 +366,6 @@ export default function AdminRecordsPage({ resource }) {
           bio: doctor.bio,
           yearsOfExperience: doctor.yearsOfExperience,
           consultationFee: Number(doctor.consultationFee),
-          currency: doctor.currency,
           image: doctor.image,
           clinicId: doctor.clinicId,
           timeZone: doctor.timeZone,
@@ -379,7 +383,7 @@ export default function AdminRecordsPage({ resource }) {
         await updateAdminService(service.id, {
           name: service.name, slug: service.slug, description: service.description,
           durationMinutes: Number(service.durationMinutes), fee: Number(service.fee),
-          currency: service.currency, clinicIds: service.clinicIds || [],
+          clinicIds: service.clinicIds || [],
           doctorIds: service.doctorIds || [], isActive: updated.isActive,
         });
       } else if (resource === 'staff') {
