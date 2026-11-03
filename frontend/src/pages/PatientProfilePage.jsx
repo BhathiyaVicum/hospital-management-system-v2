@@ -204,9 +204,9 @@ export default function PatientProfilePage() {
                 <Field label="Legal First Name"><input name="firstName" value={profile.firstName} onChange={updateField} maxLength={60} className={inputClass} required autoComplete="given-name" /></Field>
                 <Field label="Legal Last Name"><input name="lastName" value={profile.lastName} onChange={updateField} maxLength={60} className={inputClass} required autoComplete="family-name" /></Field>
                 <Field label="Date of Birth"><input type="date" name="dateOfBirth" value={profile.dateOfBirth} onChange={updateField} className={inputClass} /></Field>
-                <Field label="Biological Sex / Gender">
+                <Field label="Gender">
                   <select name="gender" value={profile.gender} onChange={updateField} className={inputClass}>
-                    <option value="">Select an option</option><option value="female">Female</option><option value="male">Male</option><option value="non_binary">Non-Binary / Intersex</option><option value="prefer_not_to_state">Prefer not to state</option>
+                    <option value="">Select an option</option><option value="female">Female</option><option value="male">Male</option>
                   </select>
                 </Field>
                 <Field label="Blood Type (read-only)">
@@ -236,10 +236,6 @@ export default function PatientProfilePage() {
                 </Field>
                 <Field label="Primary Phone"><input type="tel" name="emergencyContactPhone" value={profile.emergencyContactPhone} onChange={updateField} maxLength={32} className={inputClass} /></Field>
               </div>
-              <div className="mt-4 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
-                <p className="font-semibold text-on-surface">Medical Power of Attorney</p>
-                <p className="mt-1">For legal directive updates, please contact the clinic managing your care record.</p>
-              </div>
             </section>
 
             <section id="care-preferences" className="scroll-mt-24 rounded-2xl bg-surface-container-lowest p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
@@ -248,11 +244,6 @@ export default function PatientProfilePage() {
                 <Field label="Preferred Primary Clinic">
                   <select name="preferredClinicId" value={profile.preferredClinicId} onChange={updateField} className={inputClass}>
                     <option value="">No preferred clinic</option>{clinics.map((clinic) => <option key={clinic.id} value={clinic.id}>{clinic.name}{clinic.city ? ` (${clinic.city})` : ''}</option>)}
-                  </select>
-                </Field>
-                <Field label="Preferred Consultation Mode">
-                  <select name="preferredConsultationMode" value={profile.preferredConsultationMode} onChange={updateField} className={inputClass}>
-                    <option value="">No preference</option><option value="in_clinic">In-Clinic</option><option value="telehealth">Telehealth preference</option>
                   </select>
                 </Field>
                 <Field label="Primary Care Language"><input name="preferredLanguage" value={profile.preferredLanguage} onChange={updateField} maxLength={80} className={inputClass} /></Field>

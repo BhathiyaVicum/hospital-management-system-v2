@@ -10,8 +10,8 @@ const publicNavigationItems = [
 ];
 
 const patientNavigationItems = [
-  { label: 'Dashboard', to: '/dashboard' },
-  { label: 'My Appointments', to: '/appointments' },
+  { label: 'Dashboard', to: '/dashboard', end: true },
+  { label: 'My Appointments', to: '/dashboard/appointments' },
   { label: 'Find a Doctor', to: '/dashboard/find-doctor' },
   { label: 'Support', to: '/support' },
 ];
@@ -62,9 +62,6 @@ export default function NavigationBar() {
         ? staffNavigationItems
         : publicNavigationItems;
 
-  // Fetch the current user ONCE on mount. Re-fetching on every route change
-  // caused the nav to flip to "public" items mid-navigation and stick there
-  // whenever the request failed (cold start, transient 401, etc).
   useEffect(() => {
     let active = true;
     getCurrentUser()
@@ -73,8 +70,6 @@ export default function NavigationBar() {
       })
       .catch((error) => {
         if (!active) return;
-        // Only clear on a real auth failure. Network errors / 5xx must NOT
-        // wipe the nav — the user is still logged in.
         if (error?.status === 401) setUser(null);
         else console.error('Unable to load the signed-in user.', error);
       })
@@ -87,7 +82,6 @@ export default function NavigationBar() {
     };
   }, []);
 
-  // Close profile menu on Escape or outside click
   useEffect(() => {
     if (!isProfileOpen) return;
 
@@ -142,7 +136,12 @@ export default function NavigationBar() {
 
           <nav aria-label="Main navigation" className="hidden items-center gap-1 lg:flex">
             {navigationItems.map((item) => (
-              <NavLink key={item.label} to={item.to} className={navLinkClass}>
+              <NavLink 
+                key={item.label} 
+                to={item.to} 
+                end={item.end} 
+                className={navLinkClass}
+              >
                 {item.label}
               </NavLink>
             ))}
@@ -188,7 +187,7 @@ export default function NavigationBar() {
                     </Link>
                     {role === 'patient' && (
                       <Link
-                        to="/appointments"
+                        to="/dashboard/appointments"
                         onClick={() => setProfileOpen(false)}
                         className="flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface transition hover:bg-surface-container"
                         role="menuitem"
@@ -227,23 +226,13 @@ export default function NavigationBar() {
             !authLoading && (
               <Link
                 to="/login"
-                className="hidden rounded-lg px-4 py-2 text-base font-medium text-on-surface transition hover:bg-surface-container sm:inline-flex"
-              >
+                  className="hidden bg-primary rounded-lg px-4 py-2 text-surface font-medium transition ring-2 ring-transparent hover:bg-slate-100 hover:text-primary hover:ring-primary sm:inline-flex"              >
                 Log In
               </Link>
             )
           )}
 
-          <Link
-            to={role === 'staff' ? '/staff/support' : '/doctors'}
-            aria-label={role === 'staff' ? 'Open support queue' : 'Book an appointment'}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-semibold text-on-primary shadow-sm transition hover:bg-primary-container sm:px-4"
-          >
-            <span className="material-symbols-outlined text-base">calendar_month</span>
-            <span className="hidden sm:inline">
-              {role === 'staff' ? 'Support Queue' : 'Book Appointment'}
-            </span>
-          </Link>
+      
 
           <button
             type="button"
@@ -269,7 +258,13 @@ export default function NavigationBar() {
         >
           <div className="mx-auto flex max-w-7xl flex-col gap-1 sm:px-3">
             {navigationItems.map((item) => (
-              <NavLink key={item.label} to={item.to} onClick={closeMenu} className={navLinkClass}>
+              <NavLink 
+                key={item.label} 
+                to={item.to} 
+                end={item.end}
+                onClick={closeMenu} 
+                className={navLinkClass}
+              >
                 {item.label}
               </NavLink>
             ))}

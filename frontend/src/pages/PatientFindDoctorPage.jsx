@@ -1,29 +1,44 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { getAvailability, getClinics, getDoctors } from '../services/api';
+import { getAvailability, getClinics, getDoctors, getSpecialties } from '../services/api';
 
 export default function PatientFindDoctorPage() {
   const [searchParams] = useSearchParams();
+  
   const [filter, setFilter] = useState(() => ({
+    search: searchParams.get('search') || '',
     specialty: searchParams.get('specialty') || '',
     location: searchParams.get('location') || '',
     date: searchParams.get('date') || '',
   }));
+  
   const [submittedFilter, setSubmittedFilter] = useState(() => ({
+    search: searchParams.get('search') || '',
     specialty: searchParams.get('specialty') || '',
     location: searchParams.get('location') || '',
     date: searchParams.get('date') || '',
   }));
+
   const [doctors, setDoctors] = useState([]);
   const [clinics, setClinics] = useState([]);
+  const [specialties, setSpecialties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let ignore = false;
-    getClinics()
-      .then((response) => { if (!ignore) setClinics(response.data || []); })
-      .catch(() => { if (!ignore) setClinics([]); });
+    Promise.all([getClinics(), getSpecialties()])
+      .then(([clinicsRes, specialtiesRes]) => {
+        if (ignore) return;
+        setClinics(clinicsRes.data || []);
+        setSpecialties(specialtiesRes.data || []);
+      })
+      .catch(() => {
+        if (!ignore) {
+          setClinics([]);
+          setSpecialties([]);
+        }
+      });
     return () => { ignore = true; };
   }, []);
 
@@ -33,8 +48,10 @@ export default function PatientFindDoctorPage() {
     async function loadDoctors() {
       try {
         setLoading(true);
+        
         const response = await getDoctors({
-          search: submittedFilter.specialty,
+          search: submittedFilter.search,
+          specialty: submittedFilter.specialty,
           location: submittedFilter.location,
           limit: 20,
         });
@@ -90,7 +107,6 @@ export default function PatientFindDoctorPage() {
   const visibleDoctors = doctors;
 
   return (
-    // No breadcrumb, no footer. Just the search panel + results inside PatientLayout.
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-on-surface sm:text-3xl">Find a doctor</h1>
@@ -99,7 +115,6 @@ export default function PatientFindDoctorPage() {
         </p>
       </div>
 
-      {/* Search panel */}
       <div className="rounded-2xl bg-surface-container-lowest p-4 shadow-sm ring-1 ring-slate-200 lg:p-6">
         <form
           className="grid gap-4 md:grid-cols-12 md:items-end"
@@ -108,29 +123,52 @@ export default function PatientFindDoctorPage() {
             setSubmittedFilter(filter);
           }}
         >
-          <div className="md:col-span-4">
-            <label className="mb-2 block text-sm font-medium text-on-surface">
-              Specialty or doctor
+          <div className="md:col-span-3">
+            <label htmlFor="patient-search" className="mb-2 block text-sm font-medium text-on-surface">
+              Doctor name
             </label>
             <div className="relative">
               <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant">search</span>
               <input
+                id="patient-search"
                 type="text"
-                name="specialty"
-                value={filter.specialty}
+                name="search"
+                value={filter.search}
                 onChange={handleInputChange}
-                placeholder="Search cardiology, neurology..."
-                className="w-full rounded-xl border border-slate-200 bg-surface-container-lowest py-3 pl-10 pr-3 text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+                placeholder="e.g. Dr. Jenkins"
+                className="w-full rounded-xl border border-slate-200 bg-surface-container-lowest py-3 pl-10 pr-4 text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
               />
             </div>
           </div>
 
           <div className="md:col-span-3">
-            <label htmlFor="patient-clinic" className="mb-2 flex items-center gap-2 text-sm font-medium text-on-surface">
-              <span className="material-symbols-outlined text-lg text-primary">location_on</span>
+            <label htmlFor="patient-specialty" className="mb-2 block text-sm font-medium text-on-surface">
+              Specialty
+            </label>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant">stethoscope</span>
+              <select
+                id="patient-specialty"
+                name="specialty"
+                value={filter.specialty}
+                onChange={handleInputChange}
+                className="w-full cursor-pointer appearance-none rounded-xl border border-slate-200 bg-surface-container-lowest py-3 pl-10 pr-9 text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+              >
+                <option value="">All Specialties</option>
+                {specialties.map((spec) => (
+                  <option key={spec.id} value={spec.name}>{spec.name}</option>
+                ))}
+              </select>
+              <span className="material-symbols-outlined pointer-events-none absolute right-3 top-3 text-on-surface-variant">expand_more</span>
+            </div>
+          </div>
+
+          <div className="md:col-span-3">
+            <label htmlFor="patient-clinic" className="mb-2 block text-sm font-medium text-on-surface">
               Clinic / Location
             </label>
             <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant">location_on</span>
               <select
                 id="patient-clinic"
                 name="location"
@@ -143,37 +181,36 @@ export default function PatientFindDoctorPage() {
                   <option key={clinic.id} value={clinic.name}>{clinic.name}</option>
                 ))}
               </select>
-              <span className="material-symbols-outlined pointer-events-none absolute left-3 top-3 text-on-surface-variant">location_on</span>
-              <span className="material-symbols-outlined pointer-events-none absolute right-2 top-3 text-on-surface-variant">expand_more</span>
+              <span className="material-symbols-outlined pointer-events-none absolute right-3 top-3 text-on-surface-variant">expand_more</span>
             </div>
           </div>
 
-          <div className="md:col-span-3">
-            <label className="mb-2 block text-sm font-medium text-on-surface">Select date</label>
-            <div className="relative">
-              <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant">calendar_month</span>
-              <input
-                type="date"
-                name="date"
-                value={filter.date}
-                onChange={handleInputChange}
-                className="w-full rounded-xl border border-slate-200 bg-surface-container-lowest py-3 pl-10 pr-3 text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
-              />
+          <div className="md:col-span-3 flex gap-2">
+            <div className="flex-1">
+              <label className="mb-2 block text-sm font-medium text-on-surface">Select date</label>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant">calendar_month</span>
+                <input
+                  type="date"
+                  name="date"
+                  value={filter.date}
+                  onChange={handleInputChange}
+                  className="w-full rounded-xl border border-slate-200 bg-surface-container-lowest py-3 pl-10 pr-3 text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+                />
+              </div>
             </div>
-          </div>
-
-          <div className="md:col-span-2">
-            <button
-              type="submit"
-              className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-on-primary shadow-sm transition hover:bg-primary-container"
-            >
-              Search
-            </button>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                className="h-[50px] w-[50px] flex items-center justify-center rounded-xl bg-primary text-on-primary shadow-sm transition hover:bg-primary-container"
+              >
+                <span className="material-symbols-outlined">search</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
 
-      {/* Results */}
       <div className="mt-8">
         <div className="mb-5 flex items-center justify-between gap-4">
           <h2 className="text-xl font-semibold text-on-surface sm:text-2xl">Available doctors</h2>
@@ -201,10 +238,6 @@ export default function PatientFindDoctorPage() {
                         <div className="text-xl font-semibold text-on-surface">{doctor.name}</div>
                         <div className="text-sm text-primary">{doctor.title}</div>
                       </div>
-                      <div className="flex items-center gap-1 rounded-full bg-surface-container px-2 py-1 text-sm font-medium text-on-surface">
-                        <span className="material-symbols-outlined text-base">star</span>
-                        {doctor.rating}
-                      </div>
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-on-surface-variant">
@@ -224,10 +257,10 @@ export default function PatientFindDoctorPage() {
                     </div>
 
                     <div className="mt-5 flex gap-3">
-                      <Link to={`/doctors/${doctor.id}`} className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary hover:bg-primary-container">
-                        View profile
-                      </Link>
-                      <Link to={`/doctors/${doctor.id}/book`} className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-surface hover:bg-surface-container">
+                      <Link 
+                        to={`/dashboard/doctors/${doctor.id}/book`} 
+                        className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary hover:bg-primary-container"
+                      >
                         Book visit
                       </Link>
                     </div>

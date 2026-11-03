@@ -25,6 +25,9 @@ import StaffTicketDetailsPage from './pages/StaffTicketDetailsPage';
 import BookAppointmentPage from './pages/BookAppointmentPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import PatientFindDoctorPage from './pages/PatientFindDoctorPage';
+import HowItWorksPage from './pages/HowItWorksPage';
+import HelpPage from './pages/HelpPage';
+import PatientDoctorProfileBookingPage from './pages/PatientDoctorProfileBookingPage';
 
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 const AdminRecordsPage = lazy(() => import('./pages/AdminRecordsPage'));
@@ -65,19 +68,46 @@ function AppShell() {
     <Suspense fallback={<div className="px-4 py-16 text-center text-on-surface-variant">Loading workspace...</div>}>
      <AppLayout>
         <Routes>
+          {/* PUBLIC ROUTES */}
           <Route path="/" element={<HomePage />} />
           <Route path="/doctors" element={<FindDoctorPage />} />
           <Route path="/specialists" element={<SpecialistDirectoryPage />} />
           <Route path="/doctors/:doctorId" element={<DoctorProfileBookingPage />} />
           <Route path="/doctors/:doctorId/book" element={<RequireAuth roles={['patient']}><BookAppointmentPage /></RequireAuth>} />
+          <Route path="/find-doctor" element={<PatientFindDoctorPage />} />
           <Route path="/login" element={<SignInPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/steps" element={<HowItWorksPage />} />
+          <Route path="/help" element={<HelpPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/change-password" element={<RequireAuth roles={['patient', 'doctor', 'staff', 'receptionist', 'admin']}><ChangePasswordPage /></RequireAuth>} />
+
+          {/* PATIENT ROUTES (Dashboard) */}
           <Route path="/dashboard" element={<RequireAuth roles={['patient']}><PatientDashboardPage /></RequireAuth>} />
           <Route path="/dashboard/find-doctor" element={<RequireAuth roles={['patient']}><PatientFindDoctorPage /></RequireAuth>} />
+          <Route path="/dashboard/doctors/:doctorId/book" element={<RequireAuth roles={['patient']}><PatientDoctorProfileBookingPage /></RequireAuth>} />
+          
+          <Route path="/dashboard/appointments" element={<RequireAuth roles={['patient']}><PatientAppointmentsPage /></RequireAuth>} />
+          <Route path="/dashboard/appointments/:appointmentId" element={<RequireAuth roles={['patient']}><AppointmentDetailsPage /></RequireAuth>} />
+          <Route path="/dashboard/appointments/:appointmentId/confirmed" element={<RequireAuth roles={['patient']}><AppointmentConfirmationPage /></RequireAuth>} />
+          <Route path="/dashboard/appointments/:appointmentId/reschedule" element={<RequireAuth roles={['patient']}><RescheduleAppointmentPage /></RequireAuth>} />
+          
+          <Route path="/dashboard/profile" element={<RequireAuth roles={['patient']}><PatientProfilePage /></RequireAuth>} />
+          <Route path="/dashboard/support" element={<RequireAuth roles={['patient']}><PatientSupportPage /></RequireAuth>} />
+          <Route path="/dashboard/support/tickets/:ticketId" element={<RequireAuth roles={['patient']}><PatientTicketDetailsPage /></RequireAuth>} />
+
+          {/* LEGACY PATIENT ROUTES (Kept for compatibility) */}
+          <Route path="/appointments" element={<RequireAuth roles={['patient']}><PatientAppointmentsPage /></RequireAuth>} />
+          <Route path="/appointments/:appointmentId" element={<RequireAuth roles={['patient']}><AppointmentDetailsPage /></RequireAuth>} />
+          <Route path="/appointments/:appointmentId/confirmed" element={<RequireAuth roles={['patient']}><AppointmentConfirmationPage /></RequireAuth>} />
+          <Route path="/appointments/:appointmentId/reschedule" element={<RequireAuth roles={['patient']}><RescheduleAppointmentPage /></RequireAuth>} />
+          <Route path="/profile" element={<RequireAuth roles={['patient']}><PatientProfilePage /></RequireAuth>} />
+          <Route path="/support" element={<RequireAuth roles={['patient']}><PatientSupportPage /></RequireAuth>} />
+          <Route path="/support/tickets/:ticketId" element={<RequireAuth roles={['patient']}><PatientTicketDetailsPage /></RequireAuth>} />
+
+          {/* ADMIN ROUTES */}
           <Route path="/admin" element={<RequireAuth roles={['admin']}><Navigate to="/admin/dashboard" replace /></RequireAuth>} />
           <Route path="/admin/dashboard" element={<RequireAuth roles={['admin']}><AdminDashboardPage /></RequireAuth>} />
           <Route path="/admin/patients" element={<RequireAuth roles={['admin']}><AdminRecordsPage resource="patients" /></RequireAuth>} />
@@ -93,21 +123,19 @@ function AppShell() {
           <Route path="/admin/appointments" element={<RequireAuth roles={['admin']}><AdminAppointmentsPage /></RequireAuth>} />
           <Route path="/admin/reports" element={<RequireAuth roles={['admin']}><AdminReportsPage /></RequireAuth>} />
           <Route path="/admin/activity-logs" element={<RequireAuth roles={['admin']}><AdminActivityLogsPage /></RequireAuth>} />
-          <Route path="/dashboard" element={<RequireAuth roles={['patient']}><PatientDashboardPage /></RequireAuth>} />
-          <Route path="/appointments" element={<RequireAuth roles={['patient']}><PatientAppointmentsPage /></RequireAuth>} />
-          <Route path="/appointments/:appointmentId" element={<RequireAuth roles={['patient']}><AppointmentDetailsPage /></RequireAuth>} />
-          <Route path="/appointments/:appointmentId/confirmed" element={<RequireAuth roles={['patient']}><AppointmentConfirmationPage /></RequireAuth>} />
-          <Route path="/appointments/:appointmentId/reschedule" element={<RequireAuth roles={['patient']}><RescheduleAppointmentPage /></RequireAuth>} />
-          <Route path="/profile" element={<RequireAuth roles={['patient']}><PatientProfilePage /></RequireAuth>} />
-          <Route path="/support" element={<RequireAuth roles={['patient']}><PatientSupportPage /></RequireAuth>} />
-          <Route path="/support/tickets/:ticketId" element={<RequireAuth roles={['patient']}><PatientTicketDetailsPage /></RequireAuth>} />
+
+          {/* STAFF ROUTES */}
           <Route path="/staff/support" element={<RequireAuth roles={['staff']}><StaffSupportPage /></RequireAuth>} />
           <Route path="/staff/support/tickets/:ticketId" element={<RequireAuth roles={['staff']}><StaffTicketDetailsPage /></RequireAuth>} />
+
+          {/* DOCTOR ROUTES */}
           <Route path="/doctor" element={<RequireAuth roles={['doctor']}><Navigate to="/doctor/dashboard" replace /></RequireAuth>} />
           <Route path="/doctor/dashboard" element={<RequireAuth roles={['doctor']}><DoctorDashboardPage /></RequireAuth>} />
           <Route path="/doctor/appointments" element={<RequireAuth roles={['doctor']}><DoctorAppointmentsPage /></RequireAuth>} />
           <Route path="/doctor/schedules" element={<RequireAuth roles={['doctor']}><DoctorSchedulePage /></RequireAuth>} />
           <Route path="/doctor/profile" element={<RequireAuth roles={['doctor']}><WorkspaceProfilePage role="doctor" /></RequireAuth>} />
+
+          {/* RECEPTIONIST ROUTES */}
           <Route path="/receptionist" element={<RequireAuth roles={['receptionist']}><Navigate to="/receptionist/dashboard" replace /></RequireAuth>} />
           <Route path="/receptionist/dashboard" element={<RequireAuth roles={['receptionist']}><ReceptionistDashboardPage /></RequireAuth>} />
           <Route path="/receptionist/appointments" element={<RequireAuth roles={['receptionist']}><ReceptionistAppointmentsPage /></RequireAuth>} />

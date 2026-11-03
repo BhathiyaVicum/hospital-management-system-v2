@@ -111,11 +111,6 @@ export default function DoctorProfileBookingPage() {
                 <h1 className="mt-2 text-3xl font-semibold text-on-surface">{doctor.name}</h1>
                 <div className="mt-1 text-primary">{doctor.title}</div>
                 <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-on-surface-variant">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="material-symbols-outlined text-base text-amber-500">star</span>
-                    {doctor.rating}
-                  </span>
-                  <span>{doctor.reviews} patient reviews</span>
                   <span>{doctor.experience}</span>
                 </div>
               </div>

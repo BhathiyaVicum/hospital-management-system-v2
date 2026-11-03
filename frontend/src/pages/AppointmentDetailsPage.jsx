@@ -90,7 +90,6 @@ export default function AppointmentDetailsPage() {
     <div className="bg-surface pb-16">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-on-surface-variant">
-          <Link to="/dashboard" className="hover:text-primary">Dashboard</Link><span>/</span>
           <Link to="/appointments" className="hover:text-primary">My Appointments</Link><span>/</span>
           <span className="font-medium text-on-surface">Appointment details</span>
         </div>

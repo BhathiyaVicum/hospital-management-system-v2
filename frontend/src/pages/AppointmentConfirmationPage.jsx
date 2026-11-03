@@ -77,9 +77,26 @@ export default function AppointmentConfirmationPage() {
               <h2 className="mt-2 text-lg font-semibold text-on-surface">What’s next?</h2>
               <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">You can review your visit details or return to your dashboard at any time.</p>
               <div className="mt-5 grid gap-2">
-                <Link to={`/appointments/${appointment.id}`} className="rounded-lg bg-primary px-4 py-2.5 text-center text-sm font-semibold text-on-primary">View Appointment</Link>
-                <Link to="/appointments" className="rounded-lg border border-slate-200 bg-surface-container-lowest px-4 py-2.5 text-center text-sm font-semibold text-on-surface">My Appointments</Link>
-                <Link to="/dashboard" className="rounded-lg px-4 py-2.5 text-center text-sm font-semibold text-primary hover:bg-surface-container">Return to Dashboard</Link>
+                              <div className="mt-5 grid gap-2">
+                <Link 
+                  to={`/dashboard/appointments/${appointment.id}`} 
+                  className="rounded-lg bg-primary px-4 py-2.5 text-center text-sm font-semibold text-on-primary"
+                >
+                  View Appointment
+                </Link>
+                <Link 
+                  to="/dashboard/appointments" 
+                  className="rounded-lg border border-slate-200 bg-surface-container-lowest px-4 py-2.5 text-center text-sm font-semibold text-on-surface"
+                >
+                  My Appointments
+                </Link>
+                <Link 
+                  to="/dashboard" 
+                  className="rounded-lg px-4 py-2.5 text-center text-sm font-semibold text-primary hover:bg-surface-container"
+                >
+                  Return to Dashboard
+                </Link>
+              </div>
               </div>
             </aside>
           </div>

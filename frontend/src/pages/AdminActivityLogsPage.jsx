@@ -42,9 +42,25 @@ export default function AdminActivityLogsPage() {
           <input aria-label="Search activity" value={filters.search} onChange={(event) => update('search', event.target.value)} placeholder="Search user name or email" className="h-11 rounded-lg border border-slate-200 px-3 text-sm" />
           <select aria-label="Filter by role" value={filters.role} onChange={(event) => update('role', event.target.value)} className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="">All roles</option>{['patient', 'doctor', 'staff', 'receptionist', 'admin'].map((role) => <option key={role} value={role}>{role}</option>)}</select>
           <select aria-label="Filter by event type" value={filters.eventType} onChange={(event) => update('eventType', event.target.value)} className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="">All events</option>{['login.succeeded', 'login.failed', 'logout', 'password.changed', 'patient.updated', 'doctor.created', 'doctor.updated', 'clinic.created', 'clinic.updated', 'service.created', 'service.updated', 'staff.created', 'staff.updated', 'receptionist.created', 'receptionist.updated', 'support.ticket.status_changed', 'support.ticket.assigned'].map((event) => <option key={event} value={event}>{event}</option>)}</select>
-          <select aria-label="Filter by result" value={filters.success} onChange={(event) => update('success', event.target.value)} className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="">Successful and failed</option><option value="true">Successful</option><option value="false">Failed</option></select>
-          <label className="text-xs text-on-surface-variant">From<input type="date" value={filters.from} onChange={(event) => update('from', event.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 px-2 text-sm text-on-surface" /></label>
-          <label className="text-xs text-on-surface-variant">To<input type="date" value={filters.to} onChange={(event) => update('to', event.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 px-2 text-sm text-on-surface" /></label>
+          <label className="text-xs text-on-surface-variant">
+            Status
+            <select 
+              aria-label="Filter by result" 
+              value={filters.success} 
+              onChange={(event) => update('success', event.target.value)} 
+              className="mt-1 block h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-on-surface outline-none focus:border-primary"
+            >
+              <option value="">Successful and failed</option>
+              <option value="true">Successful</option>
+              <option value="false">Failed</option>
+            </select>
+          </label>
+          <label className="text-xs text-on-surface-variant">
+            From
+          <input type="date" value={filters.from} onChange={(event) => update('from', event.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 px-2 text-sm text-on-surface" /></label>
+          <label className="text-xs text-on-surface-variant">
+            To
+          <input type="date" value={filters.to} onChange={(event) => update('to', event.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-slate-200 px-2 text-sm text-on-surface" /></label>
         </div>
         <p className="mb-3 text-xs text-on-surface-variant">{total} events found</p>
         {loading ? <p className="py-10 text-center text-sm text-on-surface-variant">Loading activity...</p> : <AdminTable columns={[
