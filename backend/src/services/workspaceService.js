@@ -105,6 +105,25 @@ export async function doctorSchedules(userId, range) {
   return scheduleRepository.listSchedules({ doctorId, ...range });
 }
 
+export async function doctorCalendar(userId, range) {
+  const doctorId = await doctorIdFor(userId);
+  return scheduleRepository.getDoctorCalendar({ doctorId, ...range });
+}
+
+export async function saveDoctorDateSchedule(user, date, values, request) {
+  const doctorId = await doctorIdFor(user.id);
+  const result = await scheduleRepository.saveDoctorDateSchedule({ ...values, doctorId, date });
+  if (!result) throw httpError('Doctor profile not found.', 404);
+  await recordActivity({
+    actor: { id: user.id, role: user.role },
+    targetUserId: user.id,
+    eventType: 'doctor.schedule_date.updated',
+    request,
+    details: { date, slotCount: result.slotCount, availableSlotCount: result.availableSlotCount },
+  });
+  return result;
+}
+
 export async function createDoctorWeeklySchedule(user, values, request) {
   const doctorId = await doctorIdFor(user.id);
   const result = await scheduleRepository.createWeeklySchedule({ ...values, doctorId });

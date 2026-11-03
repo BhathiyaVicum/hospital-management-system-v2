@@ -78,6 +78,38 @@ export const doctorScheduleListSchema = z.object({
   }).superRefine(orderedDates),
 });
 
+export const doctorCalendarSchema = z.object({
+  query: z.object({
+    from: z.string().date(),
+    to: z.string().date(),
+  }).superRefine((value, context) => {
+    orderedDates(value, context);
+    if (value.from <= value.to) {
+      const days = (Date.parse(`${value.to}T00:00:00Z`) - Date.parse(`${value.from}T00:00:00Z`)) / 86400000 + 1;
+      if (days > 62) {
+        context.addIssue({ code: 'custom', path: ['to'], message: 'A calendar range cannot exceed 62 days.' });
+      }
+    }
+  }),
+});
+
+export const doctorDateScheduleSchema = z.object({
+  params: z.object({ date: z.string().date() }),
+  body: z.object({
+    startTime: time,
+    endTime: time,
+    slotDurationMinutes: duration,
+    slots: z.array(z.object({
+      startTime: time,
+      endTime: time,
+      isAvailable: z.boolean(),
+    }).strict()).max(144),
+  }).strict().refine((value) => value.endTime > value.startTime, {
+    message: 'The end time must be after the start time.',
+    path: ['endTime'],
+  }),
+});
+
 const weeklySchedule = {
   dayOfWeek: z.coerce.number().int().min(0).max(6),
   startTime: time,

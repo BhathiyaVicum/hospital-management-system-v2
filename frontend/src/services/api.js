@@ -202,6 +202,13 @@ export function saveDoctorConsultation(id, payload) {
   return request(`/doctor/appointments/${encodeURIComponent(id)}/consultation`, { method: 'PUT', body: JSON.stringify(payload) });
 }
 export function getDoctorWorkspaceSchedules(filters = {}) { return workspaceList('/doctor/schedules', filters); }
+export function getDoctorScheduleCalendar(filters = {}) { return workspaceList('/doctor/schedules/calendar', filters); }
+export function saveDoctorDateSchedule(date, payload) {
+  return request(`/doctor/schedules/dates/${encodeURIComponent(date)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
 export function createDoctorWeeklySchedule(payload) {
   return request('/doctor/schedules/weekly', { method: 'POST', body: JSON.stringify(payload) });
 }

@@ -1,168 +1,447 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import PortalHeading from '../components/common/PortalHeading';
 import WorkspaceLayout from '../components/workspace/WorkspaceLayout';
-import {
-  createDoctorScheduleException,
-  createDoctorWeeklySchedule,
-  deleteDoctorScheduleException,
-  getDoctorWorkspaceSchedules,
-  updateDoctorWeeklySchedule,
-} from '../services/api';
+import { getDoctorScheduleCalendar, saveDoctorDateSchedule } from '../services/api';
 
-const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const inputClass = 'mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm';
-const initialWeekly = { dayOfWeek: 1, startTime: '09:00', endTime: '17:00', slotDurationMinutes: 30, isAvailable: true };
+const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-function today() { return new Date().toISOString().slice(0, 10); }
-function futureDate() { return new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10); }
+function dateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function dateFromKey(value) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function timeToMinutes(value) {
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function minutesToTime(value) {
+  return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+}
+
+function formatTime(value) {
+  const [hours, minutes] = value.split(':').map(Number);
+  const suffix = hours >= 12 ? 'PM' : 'AM';
+  return `${String(hours % 12 || 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${suffix}`;
+}
+
+function formatDate(value, options = { day: 'numeric', month: 'long', year: 'numeric' }) {
+  return dateFromKey(value).toLocaleDateString(undefined, options);
+}
+
+function getDayIndicators(day) {
+  return {
+    hasAvailability: Boolean(day?.slots.some((slot) => slot.enabled)),
+    hasBookings: Boolean(day?.slots.some((slot) => slot.booked)),
+  };
+}
+
+function emptyEditor(day) {
+  return {
+    startTime: day?.startTime || '09:00',
+    endTime: day?.endTime || '17:00',
+    slotDurationMinutes: day?.slotDurationMinutes || 30,
+    slots: (day?.slots || []).map((slot) => ({
+      ...slot,
+      selected: slot.enabled || slot.booked,
+    })),
+    generated: Boolean(day?.slots?.length),
+  };
+}
+
+// Build slots from start/end/duration. Pure function — no state.
+function buildSlots(startTime, endTime, durationMinutes, existingDay, selectedDate, localToday) {
+  if (!startTime || !endTime || endTime <= startTime) return [];
+  const duration = Number(durationMinutes);
+  if (!Number.isInteger(duration) || duration < 10 || duration > 240) return [];
+  const start = timeToMinutes(startTime);
+  const end = timeToMinutes(endTime);
+  const starts = [];
+  for (let minute = start; minute + duration <= end; minute += duration) {
+    starts.push(minutesToTime(minute));
+  }
+  const existing = new Map((existingDay?.slots || []).map((slot) => [slot.time, slot]));
+  const isToday = selectedDate === (existingDay?.localToday || localToday);
+  return starts.map((time) => {
+    const previous = existing.get(time);
+    const slotEndTime = minutesToTime(timeToMinutes(time) + duration);
+    const isPast = previous?.isPast || (isToday && time <= (existingDay?.localTime || '00:00'));
+    return {
+      time,
+      endTime: slotEndTime,
+      startAt: previous?.startAt || '',
+      endAt: previous?.endAt || '',
+      booked: previous?.booked || false,
+      isPast: Boolean(isPast),
+      selected: previous ? previous.enabled || previous.booked : !isPast,
+    };
+  });
+}
 
 export default function DoctorSchedulePage() {
-  const [schedule, setSchedule] = useState({ weekly: [], exceptions: [] });
-  const [newWeekly, setNewWeekly] = useState(initialWeekly);
-  const [exception, setException] = useState({ availableOn: '', isAvailable: false });
-  const [editing, setEditing] = useState({});
+  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [browserToday] = useState(() => dateKey(new Date()));
+  const [calendar, setCalendar] = useState(null);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [editor, setEditor] = useState(() => emptyEditor(null));
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const preferredDate = useRef('');
 
-  const load = useCallback(async () => {
-    try {
-      const { data } = await getDoctorWorkspaceSchedules({ from: today(), to: futureDate() });
-      setSchedule(data);
-    } catch (requestError) {
-      setError(requestError.message || 'Unable to load your schedule.');
-    }
-  }, []);
+  const monthStart = dateKey(month);
+  const monthEnd = dateKey(new Date(month.getFullYear(), month.getMonth() + 1, 0));
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    getDoctorScheduleCalendar({ from: monthStart, to: monthEnd })
+      .then(({ data }) => {
+        if (!active) return;
+        setCalendar(data);
+        const preferred = preferredDate.current;
+        preferredDate.current = '';
+        const dateToSelect = data.days.some((day) => day.date === preferred && day.date >= day.localToday)
+          ? preferred
+          : '';
+        setSelectedDate(dateToSelect);
+        setEditor(emptyEditor(dateToSelect ? data.days.find((day) => day.date === dateToSelect) : null));
+      })
+      .catch((requestError) => {
+        if (!active) return;
+        setError(requestError.message || 'Unable to load your availability calendar.');
+        setCalendar(null);
+        setSelectedDate('');
+        setEditor(emptyEditor(null));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [monthStart, monthEnd, refreshVersion]);
 
-  const saveWeekly = async (event) => {
-    event.preventDefault();
-    setSaving(true);
-    setError('');
-    try {
-      await createDoctorWeeklySchedule(newWeekly);
-      setNewWeekly(initialWeekly);
-      setNotice('Weekly availability added.');
-      await load();
-    } catch (requestError) {
-      setError(requestError.message || 'Unable to save weekly availability.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const updateWeekly = async (row) => {
-    setSaving(true);
-    setError('');
-    try {
-      await updateDoctorWeeklySchedule(row.id, editing[row.id] || row);
-      setNotice('Weekly availability updated.');
-      await load();
-    } catch (requestError) {
-      setError(requestError.message || 'Unable to update weekly availability.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const saveException = async (event) => {
-    event.preventDefault();
-    setSaving(true);
-    setError('');
-    const payload = exception.isAvailable
-      ? exception
-      : { availableOn: exception.availableOn, isAvailable: false };
-    try {
-      await createDoctorScheduleException(payload);
-      setException({ availableOn: '', isAvailable: false });
-      setNotice('Date-specific availability saved.');
-      await load();
-    } catch (requestError) {
-      setError(requestError.message || 'Unable to save date exception.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const removeException = async (id) => {
-    setSaving(true);
-    setError('');
-    try {
-      await deleteDoctorScheduleException(id);
-      setNotice('Date exception removed.');
-      await load();
-    } catch (requestError) {
-      setError(requestError.message || 'Unable to remove date exception.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const weeklyField = (row, key, label, type = 'text') => (
-    <label className="text-xs font-medium text-on-surface-variant">{label}
-      <input type={type} value={editing[row.id]?.[key] ?? row[key]} onChange={(event) => setEditing({
-        ...editing,
-        [row.id]: { ...row, ...(editing[row.id] || {}), [key]: type === 'number' ? Number(event.target.value) : event.target.value },
-      })} className={inputClass} />
-    </label>
+  const daysByDate = useMemo(
+    () => new Map((calendar?.days || []).map((day) => [day.date, day])),
+    [calendar],
   );
+  const selectedDay = daysByDate.get(selectedDate);
+  const localToday = calendar?.days[0]?.localToday || browserToday;
+
+  const calendarCells = useMemo(() => {
+    const firstWeekday = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
+    const count = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    return [...Array(firstWeekday).fill(null), ...Array.from({ length: count }, (_, index) => index + 1)];
+  }, [month]);
+
+  // Whenever hours or duration change AND a date is selected, rebuild the slots
+  // automatically so the Save button is always usable without an extra click.
+  useEffect(() => {
+    if (!selectedDate) return;
+    const nextSlots = buildSlots(
+      editor.startTime,
+      editor.endTime,
+      editor.slotDurationMinutes,
+      selectedDay,
+      selectedDate,
+      localToday,
+    );
+    setEditor((current) => ({
+      ...current,
+      slots: nextSlots,
+      generated: nextSlots.length > 0,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor.startTime, editor.endTime, editor.slotDurationMinutes, selectedDate]);
+
+  const changeMonth = (amount) => {
+    setNotice('');
+    setError('');
+    setLoading(true);
+    setSelectedDate('');
+    setEditor(emptyEditor(null));
+    preferredDate.current = '';
+    setMonth((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
+  };
+
+  const selectDate = (date) => {
+    const day = daysByDate.get(date);
+    if (date < (day?.localToday || localToday)) return;
+    setSelectedDate(date);
+    setEditor(emptyEditor(day));
+    setNotice('');
+    setError('');
+  };
+
+  const clearSelection = () => {
+    setSelectedDate('');
+    setEditor(emptyEditor(null));
+    setNotice('');
+    setError('');
+  };
+
+  const updateHours = (key, value) => {
+    setEditor((current) => ({ ...current, [key]: value }));
+    setError('');
+    setNotice('');
+  };
+
+  const toggleSlot = (time) => {
+    setEditor((current) => ({
+      ...current,
+      slots: current.slots.map((slot) => (
+        slot.time === time && !slot.booked && !slot.isPast
+          ? { ...slot, selected: !slot.selected }
+          : slot
+      )),
+    }));
+    setError('');
+    setNotice('');
+  };
+
+  const cancelChanges = () => {
+    setEditor(emptyEditor(selectedDay));
+    setError('');
+    setNotice('');
+  };
+
+  const saveChanges = async () => {
+    if (!selectedDate) {
+      setError('Select a date first.');
+      return;
+    }
+    if (!editor.slots.length) {
+      setError('No slots to save. Check the start/end time and duration.');
+      return;
+    }
+
+    const payload = {
+      startTime: editor.startTime,
+      endTime: editor.endTime,
+      slotDurationMinutes: Number(editor.slotDurationMinutes),
+      slots: editor.slots.map((slot) => ({
+        startTime: slot.time,
+        endTime: slot.endTime,
+        isAvailable: slot.selected || slot.booked,
+      })),
+    };
+
+    console.log('[saveDoctorDateSchedule] date =', selectedDate, 'payload =', payload);
+
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Save request timed out. Check the backend.')), 15000),
+      );
+      const request = saveDoctorDateSchedule(selectedDate, payload);
+      await Promise.race([request, timeout]);
+      setNotice('Availability saved. Patient booking has been updated.');
+      preferredDate.current = selectedDate;
+      setRefreshVersion((version) => version + 1);
+    } catch (requestError) {
+      console.error('[saveDoctorDateSchedule] failed:', requestError);
+      setError(requestError.message || 'Unable to save availability changes.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectedSlotCount = editor.slots.filter((slot) => slot.selected && !slot.isPast).length;
+  const bookedSlotCount = editor.slots.filter((slot) => slot.booked).length;
+  const metrics = [
+    ['Available slots', calendar?.summary.availableSlots ?? '—', 'event_available'],
+    ['Booked slots', calendar?.summary.bookedSlots ?? '—', 'event_busy'],
+    ['Upcoming working days', calendar?.summary.upcomingWorkingDays ?? '—', 'calendar_month'],
+    ['Next available date', calendar?.summary.nextAvailableDate ? formatDate(calendar.summary.nextAvailableDate, { day: 'numeric', month: 'short' }) : 'None', 'schedule'],
+  ];
 
   return (
     <WorkspaceLayout role="doctor">
-      <PortalHeading eyebrow="Doctor workspace · availability" title="My schedule" description="Maintain recurring weekly hours and date-specific openings or closures. Patient booking uses these same availability rules." />
+      <PortalHeading
+        eyebrow="Doctor workspace · availability"
+        title="My schedule"
+        description="Select a date to create or update appointment slots. Existing bookings are protected automatically."
+      />
+
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-2xl bg-surface-container-lowest p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
-          <h2 className="text-lg font-semibold">Weekly availability</h2>
-          <p className="mt-1 text-sm text-on-surface-variant">Use inactive entries to pause a recurring window without deleting schedule history.</p>
-          <div className="mt-4 space-y-3">
-            {schedule.weekly.map((row) => (
-              <article key={row.id} className="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 xl:grid-cols-3">
-                <label className="text-xs font-medium text-on-surface-variant">Weekday
-                  <select value={editing[row.id]?.dayOfWeek ?? row.dayOfWeek} onChange={(event) => setEditing({ ...editing, [row.id]: { ...row, ...(editing[row.id] || {}), dayOfWeek: Number(event.target.value) } })} className={inputClass}>
-                    {weekdays.map((day, index) => <option key={day} value={index}>{day}</option>)}
-                  </select>
-                </label>
-                {weeklyField(row, 'startTime', 'Start time', 'time')}
-                {weeklyField(row, 'endTime', 'End time', 'time')}
-                {weeklyField(row, 'slotDurationMinutes', 'Slot duration (minutes)', 'number')}
-                <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium"><input type="checkbox" checked={editing[row.id]?.isAvailable ?? row.isAvailable} onChange={(event) => setEditing({ ...editing, [row.id]: { ...row, ...(editing[row.id] || {}), isAvailable: event.target.checked } })} />Accept bookings</label>
-                <button type="button" disabled={saving} onClick={() => updateWeekly(row)} className="min-h-10 self-end rounded-lg bg-primary px-3 text-sm font-semibold text-on-primary disabled:opacity-60">Save</button>
-              </article>
-            ))}
-            {!schedule.weekly.length && <p className="rounded-xl bg-surface-container-low p-5 text-sm text-on-surface-variant">No weekly schedule has been configured yet.</p>}
-          </div>
-          <form onSubmit={saveWeekly} className="mt-5 rounded-xl bg-surface-container-low p-4">
-            <h3 className="font-semibold">Add weekly time window</h3>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <label className="text-xs font-medium">Weekday<select value={newWeekly.dayOfWeek} onChange={(event) => setNewWeekly({ ...newWeekly, dayOfWeek: Number(event.target.value) })} className={inputClass}>{weekdays.map((day, index) => <option key={day} value={index}>{day}</option>)}</select></label>
-              <label className="text-xs font-medium">Start<input type="time" value={newWeekly.startTime} onChange={(event) => setNewWeekly({ ...newWeekly, startTime: event.target.value })} className={inputClass} required /></label>
-              <label className="text-xs font-medium">End<input type="time" value={newWeekly.endTime} onChange={(event) => setNewWeekly({ ...newWeekly, endTime: event.target.value })} className={inputClass} required /></label>
-              <label className="text-xs font-medium">Slot length<input type="number" min="10" max="240" value={newWeekly.slotDurationMinutes} onChange={(event) => setNewWeekly({ ...newWeekly, slotDurationMinutes: Number(event.target.value) })} className={inputClass} required /></label>
-              <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={newWeekly.isAvailable} onChange={(event) => setNewWeekly({ ...newWeekly, isAvailable: event.target.checked })} />Accept bookings</label>
+
+      <section aria-label="Availability overview" className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {metrics.map(([label, value, icon]) => (
+          <article key={label} className="rounded-2xl bg-surface-container-lowest p-4 shadow-sm ring-1 ring-slate-200">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-on-surface-variant sm:text-sm">{label}</p>
+              <span className="material-symbols-outlined text-xl text-primary" aria-hidden="true">{icon}</span>
             </div>
-            <button type="submit" disabled={saving} className="mt-4 min-h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-on-primary disabled:opacity-60">{saving ? 'Saving...' : 'Add time window'}</button>
-          </form>
+            <p className="mt-2 truncate text-xl font-semibold text-on-surface sm:text-2xl">{value}</p>
+          </article>
+        ))}
+      </section>
+
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+        <section className="rounded-2xl bg-surface-container-lowest p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Availability calendar</h2>
+              <p className="mt-0.5 text-sm text-on-surface-variant">Choose a future date to manage its slots.</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <button type="button" aria-label="Previous month" onClick={() => changeMonth(-1)} disabled={loading || saving} className="flex h-10 w-10 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container disabled:opacity-50">
+                <span className="material-symbols-outlined">chevron_left</span>
+              </button>
+              <p className="min-w-28 text-center text-sm font-semibold sm:min-w-36">{month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p>
+              <button type="button" aria-label="Next month" onClick={() => changeMonth(1)} disabled={loading || saving} className="flex h-10 w-10 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container disabled:opacity-50">
+                <span className="material-symbols-outlined">chevron_right</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 border-b border-slate-100 pb-2 text-center text-xs font-semibold text-on-surface-variant">
+            {weekDays.map((day) => <span key={day}>{day}</span>)}
+          </div>
+
+          {loading ? (
+            <p role="status" className="py-16 text-center text-sm text-on-surface-variant">Loading your calendar...</p>
+          ) : calendar ? (
+            <div className="mt-2 grid grid-cols-7 gap-1 sm:gap-2">
+              {calendarCells.map((dateNumber, index) => {
+                if (!dateNumber) return <span key={`empty-${index}`} aria-hidden="true" className="min-h-16 sm:min-h-20" />;
+                const date = dateKey(new Date(month.getFullYear(), month.getMonth(), dateNumber));
+                const day = daysByDate.get(date);
+                const past = date < (day?.localToday || localToday);
+                const indicators = getDayIndicators(day);
+                const isSelected = selectedDate === date;
+                const todayDate = date === (day?.localToday || localToday);
+                return (
+                  <button
+                    key={date}
+                    type="button"
+                    disabled={past || saving}
+                    aria-label={`${formatDate(date)}${past ? ', past date' : ''}${indicators.hasAvailability ? ', has availability' : ''}${indicators.hasBookings ? ', has bookings' : ''}`}
+                    aria-pressed={isSelected}
+                    aria-current={todayDate ? 'date' : undefined}
+                    onClick={() => selectDate(date)}
+                    className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border p-1 transition sm:min-h-20 sm:gap-1.5 ${
+                      isSelected ? 'border-primary bg-primary text-on-primary shadow-sm'
+                        : past ? 'cursor-not-allowed border-transparent bg-slate-50 text-slate-300'
+                          : 'border-transparent bg-surface-container-low text-on-surface hover:border-primary/40 hover:bg-primary/5'
+                    }`}
+                  >
+                    <span className={`text-sm font-semibold ${todayDate && !isSelected ? 'text-primary' : ''}`}>{dateNumber}</span>
+                    <span className="flex h-1.5 items-center gap-1">
+                      {indicators.hasAvailability && <i className={`h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-on-primary' : 'bg-emerald-500'}`} />}
+                      {indicators.hasBookings && <i className={`h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-on-primary/70' : 'bg-amber-500'}`} />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="py-16 text-center text-sm text-on-surface-variant">Your calendar could not be loaded.</p>
+          )}
+
+          <div aria-label="Calendar legend" className="mt-4 flex flex-wrap gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-xs text-on-surface-variant">
+            {[
+              ['bg-emerald-500', 'Availability'],
+              ['bg-amber-500', 'Bookings'],
+            ].map(([color, label]) => <span key={label} className="inline-flex items-center gap-1.5"><i className={`h-2 w-2 rounded-full ${color}`} />{label}</span>)}
+          </div>
         </section>
 
-        <section className="space-y-5">
-          <form onSubmit={saveException} className="rounded-2xl bg-surface-container-lowest p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
-            <h2 className="text-lg font-semibold">Date-specific availability</h2>
-            <p className="mt-1 text-sm text-on-surface-variant">An exception replaces the weekly schedule for its selected date.</p>
-            <label className="mt-4 block text-sm font-medium">Date<input type="date" min={today()} value={exception.availableOn} onChange={(event) => setException({ ...exception, availableOn: event.target.value })} className={inputClass} required /></label>
-            <label className="mt-4 flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={exception.isAvailable} onChange={(event) => setException({ ...exception, isAvailable: event.target.checked, ...(event.target.checked ? { startTime: '09:00', endTime: '12:00', slotDurationMinutes: 30 } : {}) })} />Open for appointments on this date</label>
-            {exception.isAvailable && <div className="mt-3 grid grid-cols-2 gap-3"><label className="text-xs font-medium">Start<input type="time" value={exception.startTime || ''} onChange={(event) => setException({ ...exception, startTime: event.target.value })} className={inputClass} required /></label><label className="text-xs font-medium">End<input type="time" value={exception.endTime || ''} onChange={(event) => setException({ ...exception, endTime: event.target.value })} className={inputClass} required /></label><label className="col-span-2 text-xs font-medium">Slot length<input type="number" min="10" max="240" value={exception.slotDurationMinutes || 30} onChange={(event) => setException({ ...exception, slotDurationMinutes: Number(event.target.value) })} className={inputClass} /></label></div>}
-            <button type="submit" disabled={saving || !exception.availableOn} className="mt-4 min-h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-on-primary disabled:opacity-60">Save date exception</button>
-          </form>
-          <div className="rounded-2xl bg-surface-container-lowest p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
-            <h2 className="text-lg font-semibold">Upcoming exceptions</h2>
-            <div className="mt-3 space-y-2">
-              {schedule.exceptions.map((item) => <article key={item.id} className="flex items-center justify-between gap-3 rounded-xl bg-surface-container-low p-3"><div><p className="font-medium">{new Date(`${item.availableOn}T00:00:00`).toLocaleDateString()}</p><p className="text-sm text-on-surface-variant">{item.isAvailable ? `${item.startTime}–${item.endTime}` : 'Unavailable'}{item.affectedAppointments ? ` · ${item.affectedAppointments} appointments affected` : ''}</p></div><button type="button" disabled={saving} onClick={() => removeException(item.id)} className="min-h-10 shrink-0 rounded-lg px-3 text-sm font-semibold text-error hover:bg-red-50">Remove</button></article>)}
-              {!schedule.exceptions.length && <p className="rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">No upcoming date exceptions.</p>}
+        <section className="min-w-0 rounded-2xl bg-surface-container-lowest p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
+          {!selectedDate ? (
+            <div className="py-12 text-center">
+              <span className="material-symbols-outlined text-4xl text-on-surface-variant/50">event_available</span>
+              <p className="mt-3 font-semibold">Select a future date</p>
+              <p className="mt-1 text-sm text-on-surface-variant">Daily availability and appointment slots will appear here.</p>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Selected date</p>
+                  <h2 className="mt-1 text-xl font-semibold">{formatDate(selectedDate)}</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  disabled={saving}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-on-surface-variant hover:bg-surface-container disabled:opacity-60"
+                >
+                  Clear selection
+                </button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="text-xs font-medium text-on-surface-variant">Start time
+                  <input type="time" value={editor.startTime} disabled={saving} onChange={(event) => updateHours('startTime', event.target.value)} className={inputClass} />
+                </label>
+                <label className="text-xs font-medium text-on-surface-variant">End time
+                  <input type="time" value={editor.endTime} disabled={saving} onChange={(event) => updateHours('endTime', event.target.value)} className={inputClass} />
+                </label>
+                <label className="text-xs font-medium text-on-surface-variant">Appointment duration (minutes)
+                  <input type="number" min="10" max="240" step="1" value={editor.slotDurationMinutes} disabled={saving} onChange={(event) => updateHours('slotDurationMinutes', Number(event.target.value))} className={inputClass} />
+                </label>
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold">Appointment slots</h3>
+                    <p className="mt-0.5 text-xs text-on-surface-variant">Slots are auto-generated from the working hours. Select open times.</p>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+                    {selectedSlotCount} selected{bookedSlotCount ? ` · ${bookedSlotCount} booked` : ''}
+                  </span>
+                </div>
+
+                {editor.slots.length ? (
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {editor.slots.map((slot) => (
+                      <button
+                        key={slot.time}
+                        type="button"
+                        disabled={saving || slot.booked || slot.isPast}
+                        aria-pressed={slot.selected}
+                        aria-label={`${formatTime(slot.time)}, ${slot.booked ? 'booked' : slot.isPast ? 'past' : slot.selected ? 'available' : 'unavailable'}`}
+                        onClick={() => toggleSlot(slot.time)}
+                        className={`min-h-12 rounded-xl border px-3 py-2 text-left transition disabled:cursor-not-allowed ${
+                          slot.booked ? 'border-indigo-200 bg-indigo-50 text-indigo-800'
+                            : slot.isPast ? 'border-slate-200 bg-slate-100 text-slate-400'
+                              : slot.selected ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                                : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="block text-sm font-semibold">{formatTime(slot.time)}</span>
+                        <span className="mt-0.5 block text-[11px]">{slot.booked ? 'Booked · protected' : slot.isPast ? 'Past' : slot.selected ? 'Available' : 'Unavailable'}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+                    No slots fit within these working hours. Check that the end time is later than the start time and the duration is between 10 and 240 minutes.
+                  </p>
+                )}
+              </div>
+
+              {bookedSlotCount > 0 && <p className="mt-4 rounded-xl bg-indigo-50 p-3 text-xs leading-relaxed text-indigo-800">Booked times are protected. Changing working hours or duration in a way that affects a booking will be rejected.</p>}
+
+              <div className="mt-5 flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
+                <button type="button" onClick={cancelChanges} disabled={saving} className="min-h-10 rounded-lg px-4 text-sm font-semibold text-on-surface-variant hover:bg-surface-container disabled:opacity-60">Cancel</button>
+                <button type="button" onClick={saveChanges} disabled={saving} className="min-h-10 rounded-lg bg-primary px-5 text-sm font-semibold text-on-primary disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Saving...' : 'Save changes'}</button>
+              </div>
+            </>
+          )}
         </section>
       </div>
     </WorkspaceLayout>

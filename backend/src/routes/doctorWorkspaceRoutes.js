@@ -4,6 +4,8 @@ import { authenticate, requireRole, requireVerifiedEmail } from '../middleware/a
 import { validate } from '../middleware/validate.js';
 import {
   consultationSchema,
+  doctorCalendarSchema,
+  doctorDateScheduleSchema,
   doctorAppointmentListSchema,
   doctorExceptionIdSchema,
   doctorExceptionSchema,
@@ -27,6 +29,8 @@ router.patch('/appointments/:appointmentId/workflow', validate(doctorWorkflowSch
 router.get('/appointments/:appointmentId/consultation', validate(workspaceAppointmentIdSchema), controller.doctorConsultation);
 router.put('/appointments/:appointmentId/consultation', validate(consultationSchema), controller.saveDoctorConsultation);
 router.get('/schedules', validate(doctorScheduleListSchema), controller.doctorSchedules);
+router.get('/schedules/calendar', validate(doctorCalendarSchema), controller.doctorCalendar);
+router.put('/schedules/dates/:date', validate(doctorDateScheduleSchema), controller.saveDoctorDateSchedule);
 router.post('/schedules/weekly', validate(doctorWeeklyScheduleSchema), controller.createDoctorWeeklySchedule);
 router.patch('/schedules/weekly/:availabilityId', validate(doctorWeeklyScheduleUpdateSchema), controller.updateDoctorWeeklySchedule);
 router.post('/schedules/exceptions', validate(doctorExceptionSchema), controller.createDoctorException);

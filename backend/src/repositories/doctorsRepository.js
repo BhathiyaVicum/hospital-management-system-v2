@@ -108,6 +108,12 @@ export async function getAvailabilitySlots(doctorId, executeQuery = query) {
        FROM doctor_info di
        CROSS JOIN generate_series(0, 59) AS series(day_offset)
      ),
+     date_schedules AS (
+       SELECT doctor_id, available_on
+       FROM doctor_availability_date_schedules
+       WHERE doctor_id = $1 AND available_on >= (SELECT min(local_date) FROM days)
+         AND available_on <= (SELECT max(local_date) FROM days)
+     ),
      regular_slots AS (
        SELECT days.id AS doctor_id, days.time_zone,
               (slot.local_start AT TIME ZONE days.time_zone) AS starts_at,
@@ -128,6 +134,10 @@ export async function getAvailabilitySlots(doctorId, executeQuery = query) {
          SELECT 1 FROM doctor_availability_exceptions exception
          WHERE exception.doctor_id = days.id AND exception.available_on = days.local_date
        )
+       AND NOT EXISTS (
+         SELECT 1 FROM date_schedules date_schedule
+         WHERE date_schedule.doctor_id = days.id AND date_schedule.available_on = days.local_date
+       )
      ),
      exception_slots AS (
        SELECT days.id AS doctor_id, days.time_zone,
@@ -135,21 +145,43 @@ export async function getAvailabilitySlots(doctorId, executeQuery = query) {
               ((slot.local_start + exception.slot_duration_minutes * interval '1 minute')
                 AT TIME ZONE days.time_zone) AS ends_at
        FROM days
-       JOIN doctor_availability_exceptions exception
+       JOIN (
+         SELECT DISTINCT ON (doctor_id, available_on) *
+         FROM doctor_availability_exceptions
+         ORDER BY doctor_id, available_on, created_at DESC, id DESC
+       ) exception
          ON exception.doctor_id = days.id
         AND exception.available_on = days.local_date
         AND exception.is_available = TRUE
        CROSS JOIN LATERAL generate_series(
-         days.local_date + exception.start_time,
-         days.local_date + exception.end_time
-           - COALESCE(exception.slot_duration_minutes, 30) * interval '1 minute',
-         COALESCE(exception.slot_duration_minutes, 30) * interval '1 minute'
+          days.local_date + exception.start_time,
+          days.local_date + exception.end_time
+            - COALESCE(exception.slot_duration_minutes, 30) * interval '1 minute',
+          COALESCE(exception.slot_duration_minutes, 30) * interval '1 minute'
        ) AS slot(local_start)
+       WHERE NOT EXISTS (
+          SELECT 1 FROM date_schedules date_schedule
+          WHERE date_schedule.doctor_id = days.id AND date_schedule.available_on = days.local_date
+       )
+     ),
+     explicit_slots AS (
+       SELECT days.id AS doctor_id, days.time_zone,
+              ((days.local_date + date_slot.start_time) AT TIME ZONE days.time_zone) AS starts_at,
+              ((days.local_date + date_slot.end_time) AT TIME ZONE days.time_zone) AS ends_at
+       FROM days
+       JOIN date_schedules date_schedule
+         ON date_schedule.doctor_id = days.id AND date_schedule.available_on = days.local_date
+       JOIN doctor_availability_date_slots date_slot
+         ON date_slot.doctor_id = date_schedule.doctor_id
+        AND date_slot.available_on = date_schedule.available_on
+        AND date_slot.is_available = TRUE
      ),
      all_slots AS (
        SELECT * FROM regular_slots
        UNION ALL
        SELECT * FROM exception_slots
+       UNION ALL
+       SELECT * FROM explicit_slots
      )
      SELECT DISTINCT to_char(all_slots.starts_at AT TIME ZONE all_slots.time_zone, 'YYYY-MM-DD') AS date,
             to_char(all_slots.starts_at AT TIME ZONE all_slots.time_zone, 'Dy, Mon FMDD') AS day,

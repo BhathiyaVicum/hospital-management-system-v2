@@ -19,6 +19,12 @@ coverage/
 .idea/
 migrations/
 test/
+!migrations/
+migrations/*
+!migrations/20261103160000_add_doctor_date_schedules.js
+!test/
+test/*
+!test/doctorSchedule.test.js
 README.md
 .DS_Store
 Thumbs.db

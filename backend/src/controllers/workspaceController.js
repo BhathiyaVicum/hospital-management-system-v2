@@ -58,6 +58,18 @@ export async function doctorSchedules(req, res) {
   return res.json({ data: await workspaceService.doctorSchedules(req.user.id, req.validated.query) });
 }
 
+export async function doctorCalendar(req, res) {
+  return res.json({ data: await workspaceService.doctorCalendar(req.user.id, req.validated.query) });
+}
+
+export async function saveDoctorDateSchedule(req, res) {
+  return res.json({
+    data: await workspaceService.saveDoctorDateSchedule(
+      actor(req), req.validated.params.date, req.validated.body, req,
+    ),
+  });
+}
+
 export async function createDoctorWeeklySchedule(req, res) {
   return res.status(201).json({
     data: await workspaceService.createDoctorWeeklySchedule(actor(req), req.validated.body, req),
