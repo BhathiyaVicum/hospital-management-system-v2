@@ -1,0 +1,33 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test",
+    "seed:admin": "node --import dotenv/config scripts/seedAdmin.js",
+    "migrate": "node --import dotenv/config ./node_modules/node-pg-migrate/bin/node-pg-migrate.js up",
+    "migrate:down": "node --import dotenv/config ./node_modules/node-pg-migrate/bin/node-pg-migrate.js down",
+    "migrate:create": "node --import dotenv/config ./node_modules/node-pg-migrate/bin/node-pg-migrate.js create"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express-rate-limit": "^7.5.0",
+    "express": "^5.3.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "node-pg-migrate": "^8.0.3",
+    "pg": "^8.16.3",
+    "resend": "^4.8.0",
+    "zod": "^4.1.12"
+  }
+}
