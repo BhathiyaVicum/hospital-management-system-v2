@@ -6,7 +6,7 @@ export function errorHandler(error, req, res, next) {
   if (res.headersSent) return next(error);
 
   if (error.code === '23505') {
-    return res.status(409).json({ message: 'A record with the provided details already exists.' });
+    return res.status(409).json({ message: 'Email provided details already exists.' });
   }
   if (error.code === '23P01') {
     return res.status(409).json({ message: 'The selected appointment time is no longer available.' });

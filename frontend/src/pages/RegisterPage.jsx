@@ -69,7 +69,7 @@ export default function RegisterPage() {
       const payload = {
         name: `${form.firstName} ${form.lastName}`.trim(),
         email: form.email,
-        phone: `${form.countryCode}${form.phone}`,
+        phone: form.phone,
         password: form.password,
       };
       await registerUser(payload);
@@ -183,7 +183,7 @@ export default function RegisterPage() {
                     name="phone"
                     value={form.phone}
                     onChange={handleChange}
-                    placeholder="(555) 019-2834"
+                    placeholder="0751231235"
                     className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-surface-container-lowest py-2.5 sm:py-3 px-3 text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                     required
                   />

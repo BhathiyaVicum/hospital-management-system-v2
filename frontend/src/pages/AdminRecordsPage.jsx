@@ -33,6 +33,7 @@ import {
 } from '../services/api';
 
 const activeField = { key: 'isActive', label: 'Account active', type: 'checkbox' };
+
 const configs = {
   patients: {
     title: 'Patient Registry',
@@ -116,7 +117,6 @@ const configs = {
     columns: [
       { key: 'name', label: 'Service' }, { key: 'slug', label: 'Code' },
       { key: 'durationMinutes', label: 'Duration', render: (row) => `${row.durationMinutes} min` },
-      { key: 'fee', label: 'Fee', render: (row) => `${row.currency} ${row.fee}` },
       { key: 'isActive', label: 'Status', render: (row) => <AdminStatus active={row.isActive} /> },
     ],
     fields: [
@@ -207,6 +207,8 @@ function presentPayload(config, values) {
 function RecordForm({ config, record, lookups, saving, onCancel, onSave, error }) {
   const createMode = !record;
   const [values, setValues] = useState(() => getDefaultValues(config, record, createMode));
+  const [showPassword, setShowPassword] = useState(false);
+  
   const fields = config.fields.filter((field) => !(field.updateOnly && createMode) && !(field.requiredOnCreate && !createMode));
   const inputClass = 'mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15';
 
@@ -229,13 +231,41 @@ function RecordForm({ config, record, lookups, saving, onCancel, onSave, error }
                 ) : (
                   <>
                     <span className="text-sm font-medium text-on-surface">{field.label}</span>
-                    {field.type === 'textarea' ? <textarea value={values[field.key] || ''} onChange={(event) => update(field.key, event.target.value)} required={field.required} rows={3} className={`${inputClass} h-auto py-2.5`} />
-                      : field.type === 'select' || field.type === 'multi' ? (
-                        <select multiple={field.type === 'multi'} required={field.required} value={values[field.key] || (field.type === 'multi' ? [] : '')} onChange={(event) => update(field.key, field.type === 'multi' ? [...event.target.selectedOptions].map((option) => option.value) : event.target.value || null)} className={`${inputClass} ${field.type === 'multi' ? 'h-28' : ''}`}>
-                          {field.type !== 'multi' && <option value="">{field.key === 'clinicId' ? 'No clinic assigned' : 'Select an option'}</option>}
-                          {(lookups[field.optionsKey] || []).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
-                        </select>
-                      ) : <input type={field.type === 'comma' ? 'text' : field.type || 'text'} min={field.min} max={field.type === 'password' ? 128 : undefined} minLength={field.type === 'password' ? 12 : undefined} value={values[field.key] ?? ''} onChange={(event) => update(field.key, event.target.value)} required={field.required || (field.requiredOnCreate && createMode)} className={inputClass} />}
+                    
+                    {field.type === 'textarea' ? (
+                      <textarea value={values[field.key] || ''} onChange={(event) => update(field.key, event.target.value)} required={field.required} rows={3} className={`${inputClass} h-auto py-2.5`} />
+                    ) : field.type === 'select' || field.type === 'multi' ? (
+                      <select multiple={field.type === 'multi'} required={field.required} value={values[field.key] || (field.type === 'multi' ? [] : '')} onChange={(event) => update(field.key, field.type === 'multi' ? [...event.target.selectedOptions].map((option) => option.value) : event.target.value || null)} className={`${inputClass} ${field.type === 'multi' ? 'h-28' : ''}`}>
+                        {field.type !== 'multi' && <option value="">{field.key === 'clinicId' ? 'No clinic assigned' : 'Select an option'}</option>}
+                        {(lookups[field.optionsKey] || []).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                      </select>
+                    ) : field.type === 'password' ? (
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={values[field.key] ?? ''}
+                          onChange={(event) => update(field.key, event.target.value)}
+                          required={field.required || (field.requiredOnCreate && createMode)}
+                          minLength={8}
+                          className={`${inputClass} pr-10`}
+                          placeholder="••••••••"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute inset-y-0 bottom-3 right-0 flex items-center justify-center px-3 text-on-surface-variant hover:text-on-surface transition-colors"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">
+                            {showPassword ? 'visibility_off' : 'visibility'}
+                          </span>
+                        </button>
+                        <span className="mt-1 block text-xs text-on-surface-variant">Minimum 8 characters</span>
+                      </div>
+                    ) : (
+                      <input type={field.type === 'comma' ? 'text' : field.type || 'text'} min={field.min} value={values[field.key] ?? ''} onChange={(event) => update(field.key, event.target.value)} required={field.required || (field.requiredOnCreate && createMode)} className={inputClass} />
+                    )}
+                    
                     {field.type === 'multi' && <span className="mt-1 block text-xs text-on-surface-variant">Hold Ctrl (Windows) or Command (Mac) to select multiple.</span>}
                   </>
                 )}
@@ -280,17 +310,8 @@ export default function AdminRecordsPage({ resource }) {
   }, [resource]);
 
   useEffect(() => {
-    if (recordId && (resource === 'patients' || resource === 'doctors')) {
-      let active = true;
-      const request = resource === 'patients' ? getAdminPatient(recordId) : getAdminDoctor(recordId);
-      request.then(({ data }) => { if (active) setDetail(data); })
-        .catch((requestError) => { if (active) setError(requestError.message || 'Unable to load record details.'); })
-        .finally(() => { if (active) setLoading(false); });
-      return () => { active = false; };
-    }
     let active = true;
     setLoading(true);
-    setError('');
     config.list({ search, status, specialtyId, clinicId, limit: pageSize, offset: page * pageSize })
       .then(({ data, pagination }) => {
         if (!active) return;
@@ -300,10 +321,34 @@ export default function AdminRecordsPage({ resource }) {
       .catch((requestError) => { if (active) setError(requestError.message || 'Unable to load records.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [config, resource, recordId, search, status, specialtyId, clinicId, page]);
+  }, [config, resource, search, status, specialtyId, clinicId, page]);
+
+  useEffect(() => {
+    if (!recordId) {
+      setDetail(null);
+      return;
+    }
+
+    if (config.detail) {
+      let active = true;
+      setLoading(true);
+      config.detail(recordId)
+        .then(({ data }) => { if (active) setDetail(data); })
+        .catch((requestError) => { if (active) setError(requestError.message || 'Unable to load record details.'); })
+        .finally(() => { if (active) setLoading(false); });
+      return () => { active = false; };
+    }
+
+    const existing = records.find((r) => r[config.key] === recordId);
+    if (existing) {
+      setDetail(existing);
+      setLoading(false);
+    }
+  }, [recordId, config, records]);
 
   const title = config.title;
   const detailTitle = useMemo(() => detail?.name || 'Record details', [detail]);
+  
   const openEdit = async (item) => {
     setError('');
     if (config.detail) {
@@ -408,7 +453,7 @@ export default function AdminRecordsPage({ resource }) {
 
   if (!config) return null;
   if (recordId) {
-    if (loading) return <p className="py-12 text-center text-on-surface-variant">Loading record details...</p>;
+    if (loading && !detail) return <p className="py-12 text-center text-on-surface-variant">Loading record details...</p>;
     if (error) return <AdminNotice>{error}</AdminNotice>;
     if (!detail) return <AdminEmptyState title="Record not found" />;
     return (
@@ -417,8 +462,41 @@ export default function AdminRecordsPage({ resource }) {
         {error && <AdminNotice>{error}</AdminNotice>}
         <div className="grid gap-5 lg:grid-cols-2">
           <AdminSection title={resource === 'patients' ? 'Patient profile' : 'Professional profile'}>
-            <dl className="grid gap-3 sm:grid-cols-2">{Object.entries(detail).filter(([key, value]) => !['appointments', 'tickets', 'availability', 'primarySpecialtyId', 'languages'].includes(key) && value !== null && typeof value !== 'object').map(([key, value]) => <div key={key} className="rounded-lg bg-surface-container-low p-3"><dt className="text-xs capitalize text-on-surface-variant">{key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}</dt><dd className="mt-1 break-words text-sm font-medium">{typeof value === 'boolean' ? <AdminStatus active={value} /> : String(value)}</dd></div>)}</dl>
-            {resource === 'doctors' && <><p className="mt-4 text-sm"><strong>Specialties:</strong> {detail.specialties?.join(', ') || 'None assigned'}</p><p className="mt-2 text-sm"><strong>Languages:</strong> {detail.languages?.join(', ') || 'Not listed'}</p><p className="mt-2 text-sm"><strong>Total appointments:</strong> {detail.appointmentCount}</p></>}
+            <dl className="grid gap-3 sm:grid-cols-2">
+              {Object.entries(detail)
+                .filter(([key, value]) => 
+                  !['id', 'userId', 'patientId', 'clinicId', 'appointments', 'tickets', 'availability', 'primarySpecialtyId', 'languages', 'currency'].includes(key) 
+                  && value !== null 
+                  && typeof value !== 'object'
+                )
+                .map(([key, value]) => (
+                  <div key={key} className="rounded-lg bg-surface-container-low p-3">
+                    <dt className="text-xs capitalize text-on-surface-variant">{key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}</dt>
+                    <dd className="mt-1 break-words text-sm font-medium">{typeof value === 'boolean' ? <AdminStatus active={value} /> : String(value)}</dd>
+                  </div>
+                ))}
+            </dl>
+            
+            {resource === 'doctors' && (
+              <>
+                {detail.clinicId && (
+                  <p className="mt-4 text-sm">
+                    <strong>Clinic:</strong> {lookups.clinics.find((clinic) => clinic.id === detail.clinicId)?.name || '—'}
+                  </p>
+                )}
+                <p className="mt-4 text-sm"><strong>Specialties:</strong> {detail.specialties?.join(', ') || 'None assigned'}</p>
+                <p className="mt-2 text-sm"><strong>Languages:</strong> {detail.languages?.join(', ') || 'Not listed'}</p>
+                <p className="mt-2 text-sm"><strong>Total appointments:</strong> {detail.appointmentCount}</p>
+              </>
+            )}
+
+            {resource === 'receptionists' && detail.clinicIds && (
+              <p className="mt-4 text-sm">
+                <strong>Assigned Clinics:</strong>{' '}
+                {detail.clinicIds.map((id) => lookups.clinics.find((c) => c.id === id)?.name).filter(Boolean).join(', ') || '—'}
+              </p>
+            )}
+
             <button type="button" onClick={() => openEdit(detail)} className="mt-5 min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-on-primary">Edit record</button>
           </AdminSection>
           {resource === 'doctors' ? <AdminSection title="Weekly availability"><AdminTable columns={[{ key: 'dayOfWeek', label: 'Weekday', render: (row) => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][row.dayOfWeek] }, { key: 'startTime', label: 'Start' }, { key: 'endTime', label: 'End' }, { key: 'slotDurationMinutes', label: 'Slot length', render: (row) => `${row.slotDurationMinutes} min` }, { key: 'isAvailable', label: 'Available', render: (row) => row.isAvailable ? 'Yes' : 'No' }]} rows={detail.availability || []} /></AdminSection>
@@ -455,7 +533,9 @@ export default function AdminRecordsPage({ resource }) {
             rowKey={config.key}
             renderActions={(item) => (
               <div className="flex justify-end gap-3">
-                {(resource === 'patients' || resource === 'doctors') && <Link to={`/admin/${resource}/${item[config.key]}`} className="font-semibold text-primary hover:underline">View</Link>}
+                {['patients', 'doctors', 'staff', 'receptionists'].includes(resource) && (
+                  <Link to={`/admin/${resource}/${item[config.key]}`} className="font-semibold text-primary hover:underline">View</Link>
+                )}
                 <button type="button" onClick={() => openEdit(item)} className="font-semibold text-primary hover:underline">Edit</button>
                 {resource !== 'patients' && <button type="button" onClick={() => setPendingStatus({ record: item })} className="font-semibold text-on-surface-variant hover:text-error">{item.isActive ? 'Deactivate' : 'Reactivate'}</button>}
               </div>

@@ -225,13 +225,13 @@ export async function createDoctor(payload) {
     );
     const doctor = await client.query(
       `INSERT INTO doctors
-        (user_id, clinic_id, professional_title, bio, years_of_experience, consultation_fee,
+         (user_id, clinic_id, professional_title, bio, years_of_experience, consultation_fee,
           primary_specialty_id,
           currency, profile_image_url, time_zone, education, languages, approval_status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'LKR', $8, $9, $10, $11, 'approved')
-      RETURNING id`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'approved')
+       RETURNING id`,
       [user.rows[0].id, payload.clinicId || null, payload.title, payload.bio || '',
-        payload.yearsOfExperience ?? null, payload.consultationFee, payload.primarySpecialtyId,
+        payload.yearsOfExperience ?? null, payload.consultationFee, payload.primarySpecialtyId, payload.currency,
         payload.image || null, payload.timeZone, payload.education || '', payload.languages || []],
     );
     await client.query(
@@ -252,12 +252,12 @@ export async function updateDoctor(doctorId, payload) {
     );
     await client.query(
       `UPDATE doctors SET clinic_id = $2, professional_title = $3, bio = $4,
-      years_of_experience = $5, consultation_fee = $6, currency = 'LKR', profile_image_url = $7,
-      time_zone = $8, education = $9, languages = $10, is_accepting_appointments = $11,
-      primary_specialty_id = $12
-      WHERE id = $1`,
+       years_of_experience = $5, consultation_fee = $6, currency = $7, profile_image_url = $8,
+       time_zone = $9, education = $10, languages = $11, is_accepting_appointments = $12,
+       primary_specialty_id = $13
+       WHERE id = $1`,
       [doctorId, payload.clinicId || null, payload.title, payload.bio || '',
-        payload.yearsOfExperience ?? null, payload.consultationFee,
+        payload.yearsOfExperience ?? null, payload.consultationFee, payload.currency,
         payload.image || null, payload.timeZone, payload.education || '', payload.languages || [],
         payload.acceptingAppointments, payload.primarySpecialtyId],
     );
@@ -341,13 +341,13 @@ export async function saveService(id, payload) {
     const service = id
       ? await client.query(
         `UPDATE healthcare_services SET name=$2, slug=$3, description=$4, duration_minutes=$5,
-         fee=$6, currency='LKR', is_active=$7 WHERE id=$1 RETURNING id`,
-        [id, payload.name, payload.slug, payload.description, payload.durationMinutes, payload.fee, payload.isActive],
+         fee=$6, currency=$7, is_active=$8 WHERE id=$1 RETURNING id`,
+        [id, payload.name, payload.slug, payload.description, payload.durationMinutes, payload.fee, payload.currency, payload.isActive],
       )
       : await client.query(
         `INSERT INTO healthcare_services (name, slug, description, duration_minutes, fee, currency)
-         VALUES ($1, $2, $3, $4, $5, 'LKR') RETURNING id`,
-        [payload.name, payload.slug, payload.description, payload.durationMinutes, payload.fee],
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [payload.name, payload.slug, payload.description, payload.durationMinutes, payload.fee, payload.currency],
       );
     if (!service.rowCount) return null;
     const serviceId = service.rows[0].id;
